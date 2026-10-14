@@ -1,0 +1,25 @@
+{
+  "mattpocock": {
+    "repo": "https://github.com/mattpocock/skills",
+    "ref": "main",
+    "path": "skills",
+    "skills": [
+      "codebase-design",
+      "diagnosing-bugs",
+      "domain-modeling",
+      "grill-with-docs",
+      "grilling",
+      "handoff",
+      "implement-spec",
+      "pr",
+      "prototype",
+      "research",
+      "setup-matt-pocock-skills",
+      "tdd",
+      "to-questionnaire",
+      "to-spec",
+      "to-tickets",
+      "wait-what"
+    ]
+  }
+}
