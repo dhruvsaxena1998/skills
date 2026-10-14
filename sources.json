@@ -47,6 +47,10 @@
       "ponytail-gain",
       "ponytail-help",
       "ponytail-review"
+    ],
+    "files": [
+      "hooks/ponytail-*.js",
+      "hooks/ponytail-statusline.sh"
     ]
   }
 }

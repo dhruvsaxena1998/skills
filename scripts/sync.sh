@@ -27,13 +27,26 @@ else
   git -C "$root" worktree add -q --orphan -b "$branch" "$tmp/vendor"
 fi
 
-rm -rf "$tmp/vendor/skills" "$tmp/vendor/licenses"
+# the vendor branch holds only what this script writes, so rebuild it from scratch
+find "$tmp/vendor" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 mkdir -p "$tmp/vendor/skills" "$tmp/vendor/licenses"
 for name in $(jq -r '.skills[]' <<<"$cfg"); do
   # look skills up by name so upstream can regroup folders without breaking us
   matches=$(find "$tmp/up/$path" -type d -name "$name" -exec test -f '{}/SKILL.md' \; -print)
   [[ $(grep -c . <<<"$matches") == 1 ]] || { echo "expected one '$name' in $repo/$path, found: ${matches:-none}" >&2; exit 1; }
   cp -R "$matches" "$tmp/vendor/skills/$name"
+done
+# extra non-skill files (e.g. hooks), copied to the same relative path
+for pattern in $(jq -r '.files // [] | .[]' <<<"$cfg"); do
+  found=0
+  for f in "$tmp/up"/$pattern; do
+    [[ -f $f ]] || continue
+    rel=${f#"$tmp/up/"}
+    mkdir -p "$tmp/vendor/$(dirname "$rel")"
+    cp "$f" "$tmp/vendor/$rel"
+    found=1
+  done
+  [[ $found == 1 ]] || { echo "no files match '$pattern' in $repo" >&2; exit 1; }
 done
 # nearest LICENSE wins: inside path, its parent, then repo root
 for lic in "$tmp/up/$path/LICENSE" "$tmp/up/$(dirname "$path")/LICENSE" "$tmp/up/LICENSE"; do
