@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -294,5 +296,32 @@ func TestApplyPrintsCurrentWarnings(t *testing.T) {
 
 	if out := skillset(t, "apply"); !strings.Contains(out, "warning: app is enabled without nice (optional)") {
 		t.Fatalf("output = %q, want the warning", out)
+	}
+}
+
+// Windows CI runs as administrator, so createLink gets a real symlink and the junction
+// branch never fires. Make a junction by hand and check we still recognise it as ours.
+func TestJunctionIsRecognisedAsOurLink(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("junctions are Windows-only")
+	}
+	home, repo := setup(t, "a")
+	dir := filepath.Join(home, ".claude", "skills")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(repo, "skills", "a")
+	if out, err := exec.Command("cmd", "/c", "mklink", "/J", filepath.Join(dir, "a"), dest).CombinedOutput(); err != nil {
+		t.Fatalf("mklink: %v: %s", err, out)
+	}
+	if got := linkDest(filepath.Join(dir, "a")); !samePath(got, dest) {
+		t.Fatalf("linkDest = %q, want %q", got, dest)
+	}
+
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}}) // a is not enabled
+	skillset(t, "apply")
+
+	if got := entries(t, dir); len(got) != 0 {
+		t.Fatalf("folder = %v, want the junction pruned like any link of ours", got)
 	}
 }
