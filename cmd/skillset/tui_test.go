@@ -53,6 +53,8 @@ func press(m *model, key string) tea.Cmd {
 		return m.key(tea.KeyMsg{Type: tea.KeyEsc})
 	case "tab":
 		return m.key(tea.KeyMsg{Type: tea.KeyTab})
+	case "shift+tab":
+		return m.key(tea.KeyMsg{Type: tea.KeyShiftTab})
 	case "enter":
 		return m.key(tea.KeyMsg{Type: tea.KeyEnter})
 	}
@@ -203,7 +205,7 @@ func TestTUIRenders(t *testing.T) {
 	for _, want := range []string{
 		"skillset", "skills", "targets", "changes", // the tab bar
 		"SOURCES", "▌ s", "2/3", // the sources column, with its rule and tally
-		"SKILLS", "example.test/s", "◉ base", "○ app", // the skills of the source we are on
+		"SKILLS", "example.test/s", "[x] base", "[ ] app", // the skills of the source we are on
 		"DETAIL", "requires   core", "optional   nice", // the detail of the skill we are on
 		"2/4 on", "1 target", "up to date with origin",
 	} {
@@ -215,7 +217,7 @@ func TestTUIRenders(t *testing.T) {
 	m.setStep(tabTargets)
 	targets := m.View()
 	for _, want := range []string{
-		"TARGETS", "◉ claude", "○ agents",
+		"TARGETS", "[x] claude", "[ ] agents",
 		"NOT OURS", "synced",
 	} {
 		if !strings.Contains(targets, want) {
@@ -380,26 +382,8 @@ func TestTUIListsWhatIsInsideAForeignEntry(t *testing.T) {
 			t.Errorf("the middle column is missing %q:\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "○ base") {
+	if strings.Contains(view, "[ ] base") {
 		t.Error("a foreign entry does not hold this repo's skills")
-	}
-}
-
-// TestTUIComfortableSpacesTheRowsOut: the density setting is the only thing
-// between a congested column and a readable one.
-func TestTUIComfortableSpacesTheRowsOut(t *testing.T) {
-	m, _, _ := tuiModel(t)
-	goTo(t, m, "app")
-
-	compact, _ := m.skillColumn(60, false)
-	m.cfg.Density = "comfortable"
-	roomy, _ := m.skillColumn(60, false)
-
-	if len(roomy) != len(compact)+3 {
-		t.Fatalf("%d lines for 3 skills, want a blank line after each of them", len(roomy))
-	}
-	if roomy[2] != "" {
-		t.Fatalf("line after the first skill = %q, want it blank", roomy[2])
 	}
 }
 
@@ -453,5 +437,141 @@ description: >
 
 	if got := m.descriptionOf("base"); !strings.HasPrefix(got, "Lazy senior dev mode") || !strings.Contains(got, "Levels:") {
 		t.Fatalf("description = %q, want both lines of the block", got)
+	}
+}
+
+// TestTUIShiftTabStepsBack covers the flow going backwards: tab walks forward
+// without wrapping, and shift+tab is the way out of every step, the review too.
+func TestTUIShiftTabStepsBack(t *testing.T) {
+	m, _, _ := tuiModel(t)
+
+	press(m, "tab")
+	press(m, "tab")
+	if m.tab() != tabChanges {
+		t.Fatal("two tabs should have reached the review")
+	}
+
+	press(m, "shift+tab")
+	if m.tab() != tabTargets {
+		t.Fatalf("shift+tab left the review on %v, want the targets", m.tab())
+	}
+	press(m, "shift+tab")
+	if m.tab() != tabSkills {
+		t.Fatalf("shift+tab landed on %v, want the first step", m.tab())
+	}
+	press(m, "shift+tab") // the first step has nowhere back to go, and must not wrap
+	if m.tab() != tabSkills {
+		t.Fatalf("shift+tab wrapped round to %v", m.tab())
+	}
+}
+
+// TestTUIClickSelectsARowWithoutTogglingIt: the pointer moves the cursor, and
+// space stays the only way to change what a save would write.
+func TestTUIClickSelectsARowWithoutTogglingIt(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	m.width, m.height = 120, 30
+	screen := strings.Split(plain(m.View()), "\n") // a click is mapped against the last draw
+
+	y := bodyTop + 2 // the heading, the first skill, then this one
+	if !strings.Contains(screen[y], "base") {
+		t.Fatalf("line %d of the screen is %q, want the row this test clicks", y, screen[y])
+	}
+	m.mouse(tea.MouseMsg{X: m.hit.x2 + 4, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+
+	if r, _ := m.at(); r.name != "base" {
+		t.Fatalf("the click landed on %q, want the row under the pointer", r.name)
+	}
+	if len(m.cfg.Enabled) != 0 || m.dirty {
+		t.Fatalf("enabled = %v, dirty = %v: a click must never toggle", m.cfg.Enabled, m.dirty)
+	}
+
+	m.mouse(tea.MouseMsg{X: m.hit.tabs[0] + 1, Y: tabLine, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if m.tab() != tabTargets {
+		t.Fatalf("clicking the second tab went to %v, want the targets", m.tab())
+	}
+}
+
+// TestTUIClickFindsTheRowInAScrolledColumn: the hit list is cut the way the
+// column is, or every click past the fold would land a few rows out.
+func TestTUIClickFindsTheRowInAScrolledColumn(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	for _, s := range []string{"a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"} {
+		write(t, filepath.Join(repo, "skills", s, "SKILL.md"), "# "+s)
+	}
+	m.build()
+	m.width, m.height = 120, 15
+	goTo(t, m, "unlisted") // the loose skills, more of them than the screen has room for
+	press(m, "l")
+	for range 8 {
+		press(m, "j") // far enough down that the column has scrolled
+	}
+	screen := strings.Split(plain(m.View()), "\n")
+
+	y := bodyTop + 2
+	line := screen[y]
+	m.mouse(tea.MouseMsg{X: m.hit.x2 + 4, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+
+	r, _ := m.at()
+	if r.name == "" || !strings.Contains(line, r.name) {
+		t.Fatalf("the click landed on %q, and line %d of the screen reads %q", r.name, y, line)
+	}
+}
+
+// TestTUICascadeIsThePendingStateAndClears covers the rail line: it says what a
+// save would do rather than what the last key did, and goes when the cursor does.
+func TestTUICascadeIsThePendingStateAndClears(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	goTo(t, m, "app")
+
+	press(m, " ") // app drags core and base in with it
+	if !strings.Contains(m.cascade, "3 skills on") ||
+		!strings.Contains(m.cascade, "also on, it requires them: base, core") {
+		t.Fatalf("cascade = %q, want the pending state and what the toggle dragged in", m.cascade)
+	}
+
+	press(m, " ") // app off again: base and core stay on, so the line has to change
+	if !strings.Contains(m.cascade, "2 skills on") || strings.Contains(m.cascade, "app") {
+		t.Fatalf("cascade = %q, want what a save would do now, not the last toggle alone", m.cascade)
+	}
+
+	press(m, "j")
+	if m.cascade != "" {
+		t.Fatalf("cascade = %q, want it gone once the cursor left the row", m.cascade)
+	}
+	if !m.dirty {
+		t.Fatal("moving the cursor clears the line, not the changes behind it")
+	}
+}
+
+// TestTUIDetailLoadsPatchesOffTheDraw covers the stall the owner felt: the log
+// behind the detail pane is a command, so no draw ever waits on a subprocess.
+func TestTUIDetailLoadsPatchesOffTheDraw(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	goTo(t, m, "app")
+
+	view := plain(m.View())
+	if len(m.patches) != 0 {
+		t.Fatalf("the draw went off to the repo: patches = %v", m.patches)
+	}
+	if !strings.Contains(view, "patches") {
+		t.Errorf("a field still loading should say so:\n%s", view)
+	}
+
+	m.ticking = true // a tick is already in flight, so this is the one command alone
+	cmd := m.load()
+	if cmd == nil {
+		t.Fatal("the skill under the cursor should have its patches on the way")
+	}
+	msg, ok := cmd().(patchMsg)
+	if !ok || msg.name != "app" {
+		t.Fatalf("the command sent %#v, want the patches of the row under the cursor", msg)
+	}
+
+	m.Update(patchMsg{name: "app", list: []string{"abc1234 patch(app): a local fix"}})
+	if view = plain(m.View()); !strings.Contains(view, "1 local") || !strings.Contains(view, "abc1234") {
+		t.Errorf("the pane should fill in when the answer arrives:\n%s", view)
+	}
+	if m.load() != nil {
+		t.Fatal("a loaded skill must not ask again")
 	}
 }

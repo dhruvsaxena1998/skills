@@ -17,6 +17,28 @@ const (
 	tabChanges
 )
 
+// the screen above the columns is fixed: a blank line, the top line, a blank, the
+// tabs, a blank. A click arrives as a screen position, so the two have to agree.
+const (
+	tabLine = 3
+	bodyTop = 5
+)
+
+// the checkbox: three cells wide wherever it is drawn, which the column widths
+// and every plain string behind the selection bar have to allow for
+const (
+	boxOn  = "[x]"
+	boxOff = "[ ]"
+)
+
+// layout is where the last draw put things, so a click can be mapped back to a
+// row without the drawing and the pointer having to agree about it twice over.
+type layout struct {
+	tabs       []int // the x each tab ends at
+	x2, x3     int   // where the middle and the detail column start
+	first, mid []int // the cursor index on each drawn line of that column, or -1
+}
+
 // tab is the step on screen: the review while it is up, and otherwise the step
 // the keys are moving you through.
 func (m *model) tab() tabID {
@@ -52,13 +74,12 @@ func (m *model) topLine() string {
 			on++
 		}
 	}
-	noun := " targets"
-	if len(m.cfg.Targets) == 1 {
-		noun = " target"
-	}
-	stats := fmt.Sprintf("%d/%d on  ·  %d", on, total, len(m.cfg.Targets)) + noun
+	stats := fmt.Sprintf("%d/%d on  ·  ", on, total) + plural(len(m.cfg.Targets), "target")
 	if m.status != "" {
 		stats += "  ·  " + m.status
+	}
+	if m.loading["origin"] {
+		stats += " " + m.spin() // the fetch is still out; the screen didn't wait for it
 	}
 	title, repo := ui.title.Render("skillset"), "  "+m.cfg.Repo
 	if lipgloss.Width(title)+lipgloss.Width(repo)+lipgloss.Width(stats)+6 > m.width {
@@ -79,8 +100,15 @@ func (m *model) tabBar() string {
 		targets += fmt.Sprintf(" · %d not ours", n)
 	}
 	t := m.tab()
-	return ui.tab("skills", t == tabSkills) + ui.tab(targets, t == tabTargets) +
-		ui.tab(changes, t == tabChanges)
+	bar := []string{ui.tab("skills", t == tabSkills), ui.tab(targets, t == tabTargets),
+		ui.tab(changes, t == tabChanges)}
+	m.hit.tabs = nil
+	x := 2 // the two spaces the bar is printed after
+	for _, s := range bar {
+		x += lipgloss.Width(s)
+		m.hit.tabs = append(m.hit.tabs, x)
+	}
+	return strings.Join(bar, "")
 }
 
 // columns draws the three of them: this step's rows, what the one under the cursor
@@ -90,22 +118,27 @@ func (m *model) columns(h int) string {
 	// the descriptions move inline instead; the description is never absent from both
 	showDetail := m.width >= 90
 	inline := !showDetail || m.width >= 120
-	sourceW, detailW := 18, 32
-	skillW := max(24, m.width-25)
+	// the detail pane is where a choice is actually made, so it takes a quarter of
+	// a wide screen; the skills column keeps the rest and the sources need little
+	sourceW, detailW := 16, max(40, m.width/4)
+	skillW := max(24, m.width-23)
 	if showDetail {
-		skillW = max(24, m.width-60)
+		skillW = max(24, m.width-detailW-26)
 	}
 
-	c1, sel1 := m.firstColumn(sourceW)
-	c2, sel2 := m.skillColumn(skillW, inline)
+	c1, sel1, hit1 := m.firstColumn(sourceW)
+	c2, sel2, hit2 := m.skillColumn(skillW, inline)
 	if m.step == tabTargets {
-		c2, sel2 = m.insideColumn(skillW), -1
+		c2, sel2, hit2 = m.insideColumn(skillW), -1, nil
 	}
 	panes := []string{
 		pad(windowed(c1, &m.left, sel1, h), sourceW, h),
 		pad(windowed(c2, &m.mid, sel2, h), skillW, h),
 	}
+	m.hit.x2, m.hit.x3 = 2+sourceW+3, m.width+1
+	m.hit.first, m.hit.mid = drawn(hit1, m.left, h), drawn(hit2, m.mid, h)
 	if showDetail {
+		m.hit.x3 = m.hit.x2 + skillW + 3
 		// shortcut: a detail longer than the screen is cut, not scrolled; it is the
 		// one pane you can always read in the file itself
 		panes = append(panes, pad(m.detail(detailW), detailW, h))
@@ -122,13 +155,16 @@ func (m *model) columns(h int) string {
 
 // firstColumn is the first column of the step you are on: every source with its
 // own rule and tally, or the agent targets and the entries in those folders that
-// aren't ours. It returns the lines and which of them the cursor is on.
-func (m *model) firstColumn(width int) ([]string, int) {
+// aren't ours. It returns the lines, which of them the cursor is on, and the row
+// each of them belongs to, which is what a click is mapped through.
+func (m *model) firstColumn(width int) ([]string, int, []int) {
 	here := -1
 	if len(m.shown) > 0 {
 		here = m.shown[m.cursor]
 	}
 	var out []string
+	var hits []int // the cursor index on each line, -1 where there is no row on it
+	noRow := func(line string) { out, hits = append(out, line), append(hits, -1) }
 	sel, kind, nth := -1, rowKind(-1), 0
 	for i, r := range m.rows {
 		if r.kind == rowSkill || stepOf(r.kind) != m.step {
@@ -136,9 +172,10 @@ func (m *model) firstColumn(width int) ([]string, int) {
 		}
 		if r.kind != kind {
 			if len(out) > 0 && out[len(out)-1] != "" {
-				out = append(out, "")
+				noRow("")
 			}
-			out, kind = append(out, ui.dim.Render(headings[r.kind])), r.kind
+			noRow(ui.dim.Render(headings[r.kind]))
+			kind = r.kind
 		}
 		var plain, styled string
 		switch r.kind {
@@ -153,13 +190,12 @@ func (m *model) firstColumn(width int) ([]string, int) {
 			}
 			styled, nth = ui.rule(nth)+" "+shown+gap+ui.dim.Render(tally), nth+1
 		case rowTarget:
-			plain = "  ○ " + r.name
-			dot, name := ui.dim.Render("○"), ui.dim.Render(r.name)
+			name := trunc(r.name, width-6) // two in, the box, and the space after it
+			glyph, box, shown := boxOff, ui.dim.Render(boxOff), ui.dim.Render(name)
 			if slices.Contains(m.cfg.Targets, r.name) {
-				plain = "  ◉ " + r.name
-				dot, name = ui.ok.Render("◉"), ui.text.Render(r.name)
+				glyph, box, shown = boxOn, ui.ok.Render(boxOn), ui.text.Render(name)
 			}
-			styled = "  " + dot + " " + name
+			plain, styled = "  "+glyph+" "+name, "  "+box+" "+shown
 		default:
 			plain = "  " + trunc(filepath.Base(r.name), width-2)
 			styled = ui.dim.Render(plain)
@@ -167,12 +203,9 @@ func (m *model) firstColumn(width int) ([]string, int) {
 		if i == here {
 			sel, styled = len(out), ui.bar.Render(fit(plain, width))
 		}
-		out = append(out, styled)
-		if m.comfortable() {
-			out = append(out, "")
-		}
+		out, hits = append(out, styled), append(hits, slices.Index(m.shown, i))
 	}
-	return out, sel
+	return out, sel, hits
 }
 
 // insideColumn is the middle column on the targets step: what the folder under
@@ -206,7 +239,7 @@ func (m *model) notOurs() int {
 
 // skillColumn is the middle column: the skills of the current source, or every
 // match while a filter is on, with the description inline when there is room.
-func (m *model) skillColumn(width int, inline bool) ([]string, int) {
+func (m *model) skillColumn(width int, inline bool) ([]string, int, []int) {
 	head := ui.dim.Render("SKILLS")
 	if s, ok := m.sources[m.source]; ok && s.Repo != "" && m.filter == "" {
 		head += ui.dim.Render("  " + trunc(trimScheme(s.Repo), width-10))
@@ -214,25 +247,26 @@ func (m *model) skillColumn(width int, inline bool) ([]string, int) {
 	if m.filter != "" {
 		head = ui.dim.Render("SKILLS  matching ") + ui.text.Render(trunc(m.filter, width-18))
 	}
-	out, sel := []string{head}, -1
+	out, sel, hits := []string{head}, -1, []int{-1}
 
+	// a row is a space, the three-cell box, a space, the name, then the description
 	nameW := 24
-	descW := width - nameW - 4
+	descW := width - nameW - 6
 	if !inline || descW < 18 {
-		nameW, descW = width-5, 0
+		nameW, descW = width-6, 0
 	}
 	for _, i := range m.midRows() {
 		r := m.rows[m.shown[i]]
 		name := trunc(r.name, nameW)
-		dot, glyph := ui.dim.Render("○"), "○"
+		box, glyph := ui.dim.Render(boxOff), boxOff
 		if slices.Contains(m.cfg.Enabled, r.name) {
-			dot, glyph = ui.ok.Render("◉"), "◉"
+			box, glyph = ui.ok.Render(boxOn), boxOn
 		}
 		badge, badgePlain := "", ""
 		if r.note == "new" {
 			badge, badgePlain = ui.badge.Render(" new ")+" ", " new  "
 		}
-		plain, styled := " "+glyph+" "+name, " "+dot+" "+name
+		plain, styled := " "+glyph+" "+name, " "+box+" "+name
 		if descW > 0 {
 			gap := strings.Repeat(" ", max(1, nameW+1-lipgloss.Width(name)))
 			desc := trunc(m.descriptionOf(r.name), descW-lipgloss.Width(badgePlain))
@@ -244,19 +278,16 @@ func (m *model) skillColumn(width int, inline bool) ([]string, int) {
 		if i == m.cursor {
 			sel, styled = len(out), ui.bar.Render(fit(plain, width))
 		}
-		out = append(out, styled)
-		if m.comfortable() {
-			out = append(out, "")
-		}
+		out, hits = append(out, styled), append(hits, i)
 	}
 	if len(out) == 1 {
 		empty := " no skills here"
 		if m.filter != "" {
 			empty = " nothing matches " + trunc(m.filter, width-18)
 		}
-		out = append(out, "", ui.dim.Render(empty))
+		out, hits = append(out, "", ui.dim.Render(empty)), append(hits, -1, -1)
 	}
-	return out, sel
+	return out, sel, hits
 }
 
 // midRows lists the shown skills the middle column carries: one source's, or every
@@ -390,9 +421,9 @@ func (m *model) detail(width int) []string {
 			if t.name != r.name {
 				continue
 			}
-			state := ui.dim.Render("○ off")
+			state := ui.dim.Render(boxOff + " off")
 			if slices.Contains(m.cfg.Targets, r.name) {
-				state = ui.ok.Render("◉ on")
+				state = ui.ok.Render(boxOn + " on")
 			}
 			body = ui.text.Bold(true).Render(r.name) + "\n" + state + "\n\n" +
 				ui.label.Render("skills     ") + "~/" + filepath.ToSlash(t.dir) + "\n" +
@@ -420,9 +451,9 @@ func (m *model) detail(width int) []string {
 
 func (m *model) skillDetail(r row) string {
 	var b strings.Builder
-	state := ui.dim.Render("○ off")
+	state := ui.dim.Render(boxOff + " off")
 	if slices.Contains(m.cfg.Enabled, r.name) {
-		state = ui.ok.Render("◉ enabled")
+		state = ui.ok.Render(boxOn + " enabled")
 	}
 	b.WriteString(ui.text.Bold(true).Render(r.name) + "\n" + state + ui.dim.Render("  ·  "+r.src))
 	if r.note == "new" {
@@ -446,7 +477,12 @@ func (m *model) skillDetail(r row) string {
 	field("requires", strings.Join(d.Requires, ", "))
 	field("optional", strings.Join(d.Optional, ", "))
 	field("needed by", strings.Join(dependents, ", "))
-	if patches := m.patchesFor(r.name); len(patches) > 0 {
+	// the git log behind this is a command, so the pane draws at once and says so
+	// while the answer is still coming
+	switch patches, loaded := m.patches[r.name]; {
+	case !loaded:
+		field("patches", ui.dim.Render(m.spin()))
+	case len(patches) > 0:
 		field("patches", fmt.Sprintf("%d local", len(patches)))
 		for _, p := range patches {
 			b.WriteString(ui.dim.Render("  "+p) + "\n")
@@ -526,6 +562,31 @@ func windowed(col []string, top *int, sel, height int) []string {
 		out[len(out)-1] = ui.dim.Render(fmt.Sprintf("  … %d more", hidden+1))
 	}
 	return append([]string{head}, out...)
+}
+
+// drawn cuts a column's hit list the way windowed cut the lines it belongs to,
+// so a click lands on the row that is under it and not on one scrolled away.
+func drawn(hits []int, top, height int) []int {
+	if height < 1 || len(hits) == 0 {
+		return hits
+	}
+	body := hits[1:]
+	if len(body) <= height-1 {
+		return hits
+	}
+	out := append([]int{-1}, body[top:top+height-1]...)
+	if len(body)-top-(height-1) > 0 {
+		out[len(out)-1] = -1 // windowed gave that line over to the count of the rest
+	}
+	return out
+}
+
+// plural is a count and its noun, with an s on the noun when it needs one.
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // trimScheme drops the https:// a repo URL carries, which says nothing on screen.
