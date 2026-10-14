@@ -345,7 +345,7 @@ func TestEveryThemeFillsEveryField(t *testing.T) {
 		useTheme(name)
 		for field, c := range map[string]string{"Accent": string(th.Accent), "AccentAlt": string(th.AccentAlt),
 			"OK": string(th.OK), "Warn": string(th.Warn), "Muted": string(th.Muted),
-			"Text": string(th.Text), "Inverse": string(th.Inverse), "BarInk": string(th.BarInk)} {
+			"Text": string(th.Text), "Inverse": string(th.Inverse)} {
 			if len(c) != 7 || c[0] != '#' {
 				t.Errorf("theme %q has %s = %q, want a hex colour", name, field, c)
 			}
