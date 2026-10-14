@@ -51,6 +51,8 @@ func run(args []string, out io.Writer, in io.Reader) error {
 			fmt.Fprintln(out, w)
 		}
 		return nil
+	case "update":
+		return updateCmd(args[1:], out)
 	case "", "help", "-h", "--help":
 		fmt.Fprint(out, usage)
 		return nil
