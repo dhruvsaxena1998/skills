@@ -45,12 +45,28 @@ func goTo(t *testing.T, m *model, name string) {
 	t.Fatalf("no row named %q", name)
 }
 
-func press(m *model, key string) {
-	if key == " " {
-		m.key(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
-		return
+func press(m *model, key string) tea.Cmd {
+	switch key {
+	case " ":
+		return m.key(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+	case "esc":
+		return m.key(tea.KeyMsg{Type: tea.KeyEsc})
+	case "tab":
+		return m.key(tea.KeyMsg{Type: tea.KeyTab})
+	case "enter":
+		return m.key(tea.KeyMsg{Type: tea.KeyEnter})
 	}
-	m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+	return m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
+}
+
+// quits is whether that key asked the program to end.
+func quits(m *model, key string) bool {
+	cmd := press(m, key)
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
 }
 
 func TestTUITogglingASkillPullsInWhatItRequires(t *testing.T) {
@@ -129,6 +145,7 @@ func TestTUIShowsForeignEntriesAndNeverChangesThem(t *testing.T) {
 	write(t, filepath.Join(foreign, "SKILL.md"), "# not ours")
 	m.build()
 
+	m.setStep(tabTargets) // they live in the target folders, so that is where they are listed
 	goTo(t, m, filepath.Join("~", ".claude", "skills", "synced"))
 	press(m, " ") // toggling it must do nothing at all
 	if m.dirty {
@@ -186,23 +203,36 @@ func TestTUIRenders(t *testing.T) {
 	for _, want := range []string{
 		"skillset", "skills", "targets", "changes", // the tab bar
 		"SOURCES", "▌ s", "2/3", // the sources column, with its rule and tally
-		"TARGETS", "◉ claude", "○ agents",
-		"NOT OURS", "synced",
 		"SKILLS", "example.test/s", "◉ base", "○ app", // the skills of the source we are on
 		"DETAIL", "requires   core", "optional   nice", // the detail of the skill we are on
 		"2/4 on", "1 target", "up to date with origin",
 	} {
 		if !strings.Contains(view, want) {
-			t.Errorf("the screen is missing %q", want)
+			t.Errorf("the skills step is missing %q", want)
 		}
 	}
+
+	m.setStep(tabTargets)
+	targets := m.View()
+	for _, want := range []string{
+		"TARGETS", "◉ claude", "○ agents",
+		"NOT OURS", "synced",
+	} {
+		if !strings.Contains(targets, want) {
+			t.Errorf("the targets step is missing %q", want)
+		}
+	}
+	if strings.Contains(targets, "SOURCES") {
+		t.Error("the sources belong to the step before this one")
+	}
+	m.setStep(tabSkills)
 
 	// the new badge rides on the skill itself, so it has to be where that skill is
 	goTo(t, m, "nice")
 	if !strings.Contains(m.View(), "new") {
 		t.Error("an unseen skill should be badged on screen")
 	}
-	t.Log("\n" + view)
+	t.Log("\n" + view + "\n" + targets)
 }
 
 // TestTUIMovesBetweenColumns covers the one thing the flat list didn't have: a
@@ -234,53 +264,142 @@ func TestTUIMovesBetweenColumns(t *testing.T) {
 	}
 }
 
-// TestTUITabBarSaysWhereYouAre: the bar is an indicator, not navigation. It reads
-// off the cursor, and tab moves nothing.
-func TestTUITabBarSaysWhereYouAre(t *testing.T) {
+// TestTUIStepsThroughTheFlow: the tab bar is the steps, and tab walks them
+// forward while esc walks them back.
+func TestTUIStepsThroughTheFlow(t *testing.T) {
 	m, _, _ := tuiModel(t)
 	goTo(t, m, "app")
 	if m.tab() != tabSkills {
-		t.Fatal("a skill under the cursor is the skills tab")
+		t.Fatal("the flow starts on the skills")
 	}
 
-	before, _ := m.at()
-	m.key(tea.KeyMsg{Type: tea.KeyTab})
-	if after, _ := m.at(); after != before || m.review != nil {
-		t.Fatalf("tab landed on %+v, want nothing moved", after)
-	}
-
-	goTo(t, m, "claude") // walking onto a target row is what lights that tab
+	press(m, "tab")
 	if m.tab() != tabTargets {
-		t.Fatal("a target under the cursor is the targets tab")
+		t.Fatal("tab should step onto the targets")
+	}
+	if r, _ := m.at(); r.kind != rowTarget {
+		t.Fatalf("the cursor is on %+v, want a target row", r)
 	}
 
-	press(m, "s")
-	if m.review == nil || m.tab() != tabChanges {
-		t.Fatal("s opens the review, which is the changes tab")
+	press(m, "tab")
+	if m.tab() != tabChanges || m.review == nil {
+		t.Fatal("the step after the targets is the review")
 	}
-	press(m, "q") // and esc or q is still the way out of it
+	press(m, "tab") // the review is the last step, with nowhere forward to go
+	if m.review == nil {
+		t.Fatal("tab should not have left the review")
+	}
+
+	press(m, "esc")
+	if m.tab() != tabTargets {
+		t.Fatal("esc should come back out of the review")
+	}
+	press(m, "esc")
+	if m.tab() != tabSkills {
+		t.Fatal("esc should step back to the skills")
+	}
+	if r, _ := m.at(); r.kind != rowSource || r.name != "s" {
+		t.Fatalf("stepping back landed on %+v, want the source we were reading", r)
+	}
+
+	press(m, "s") // and s still jumps straight to the review from anywhere
+	if m.review == nil || m.tab() != tabChanges {
+		t.Fatal("s opens the review")
+	}
+	press(m, "q") // q is esc everywhere outside a text field
 	if m.review != nil {
 		t.Fatal("q should leave the review")
 	}
 }
 
-// TestTUICountsForeignEntriesItCannotShow covers #13: on a short screen the first
-// column scrolls NOT OURS off, and a section you can't see must still say it exists.
-func TestTUICountsForeignEntriesItCannotShow(t *testing.T) {
+// TestTUIQuitsOnlyFromTheFirstStep: both keys dismiss one thing at a time, and
+// quit only when there is nothing left to dismiss.
+func TestTUIQuitsOnlyFromTheFirstStep(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	m.setStep(tabTargets)
+
+	if quits(m, "q") {
+		t.Fatal("from a later step, q steps back rather than quitting")
+	}
+	if m.tab() != tabSkills {
+		t.Fatal("q should have stepped back to the skills")
+	}
+	if !quits(m, "q") || !quits(m, "esc") {
+		t.Fatal("on the first step, with nothing left to dismiss, both keys quit")
+	}
+
+	// a filter is one more thing to dismiss, and it goes before the step does
+	press(m, "/")
+	press(m, "c")
+	press(m, "esc") // the focus first, keeping what is typed
+	if m.typing || m.filter != "c" {
+		t.Fatalf("typing = %v, filter = %q, want the focus dropped and the text kept", m.typing, m.filter)
+	}
+	if quits(m, "esc") || m.filter != "" {
+		t.Fatalf("the next esc clears the filter, not the app: filter = %q", m.filter)
+	}
+	if !quits(m, "esc") {
+		t.Fatal("with the filter gone there is nothing left to dismiss")
+	}
+}
+
+// TestTUICountsForeignEntriesOnTheTargetsTab covers #13: the entries are a step
+// away now, so the count has to be on screen while you are not looking at them.
+func TestTUICountsForeignEntriesOnTheTargetsTab(t *testing.T) {
 	m, home, _ := tuiModel(t)
 	for _, name := range []string{"synced", "trash"} {
 		write(t, filepath.Join(home, ".claude", "skills", name, "SKILL.md"), "# not ours")
 	}
 	m.build()
-	m.width, m.height = 110, 16
 
 	view := m.View()
 
 	if strings.Contains(view, "synced") || strings.Contains(view, "trash") {
-		t.Fatal("this height is meant to be too short to list them; the test proves nothing")
+		t.Fatal("the skills step is meant not to list them; the test proves nothing")
 	}
-	if !strings.Contains(view, "NOT OURS · 2 more") {
+	if !strings.Contains(view, "2 not ours") {
 		t.Errorf("the count of foreign entries is missing from:\n%s", view)
+	}
+}
+
+// TestTUIListsWhatIsInsideAForeignEntry: the middle column is what the entry
+// under the cursor holds, not the skills of whichever source was last selected.
+func TestTUIListsWhatIsInsideAForeignEntry(t *testing.T) {
+	m, home, _ := tuiModel(t)
+	write(t, filepath.Join(home, ".claude", "skills", "synced", "SKILL.md"), "# not ours")
+	write(t, filepath.Join(home, ".claude", "skills", "synced", "notes.md"), "notes")
+	m.build()
+	goTo(t, m, "app") // the source whose skills used to be stuck in that column
+
+	m.setStep(tabTargets)
+	goTo(t, m, filepath.Join("~", ".claude", "skills", "synced"))
+	view := m.View()
+
+	for _, want := range []string{"CONTENTS", "SKILL.md", "notes.md"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the middle column is missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "○ base") {
+		t.Error("a foreign entry does not hold this repo's skills")
+	}
+}
+
+// TestTUIComfortableSpacesTheRowsOut: the density setting is the only thing
+// between a congested column and a readable one.
+func TestTUIComfortableSpacesTheRowsOut(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	goTo(t, m, "app")
+
+	compact, _ := m.skillColumn(60, false)
+	m.cfg.Density = "comfortable"
+	roomy, _ := m.skillColumn(60, false)
+
+	if len(roomy) != len(compact)+3 {
+		t.Fatalf("%d lines for 3 skills, want a blank line after each of them", len(roomy))
+	}
+	if roomy[2] != "" {
+		t.Fatalf("line after the first skill = %q, want it blank", roomy[2])
 	}
 }
 
@@ -303,6 +422,20 @@ func TestTUIFilterTogglesWithSpace(t *testing.T) {
 	}
 	if !m.typing {
 		t.Fatal("a toggle shouldn't drop you out of the filter")
+	}
+}
+
+// TestTUIFilterTakesQAsText: in a text field letters are text, or you could
+// never search for a skill with a q in its name.
+func TestTUIFilterTakesQAsText(t *testing.T) {
+	m, _, _ := tuiModel(t)
+
+	press(m, "/")
+	if quits(m, "q") {
+		t.Fatal("q in the filter must type a q, not quit")
+	}
+	if m.filter != "q" || !m.typing {
+		t.Fatalf("filter = %q, typing = %v, want the letter in the filter", m.filter, m.typing)
 	}
 }
 
