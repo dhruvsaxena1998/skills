@@ -88,3 +88,13 @@ It also registers the hooks in `hooks/hooks.json` (ponytail's always-on mode) in
 Links are symlinks, so edits in this repo take effect immediately. Existing entries that don't come from this repo are left alone. Re-run after adding or removing skills.
 
 Requires `git` 2.42+, `jq`, and `node` for the ponytail hooks.
+
+### Windows
+
+Run the scripts from **Git Bash** (it ships with Git for Windows).
+
+1. Turn on **Developer Mode** (Settings → System → For developers). The link script needs it to create real symlinks; without it, `ln -s` fails instead of silently copying.
+2. Install the tools: `winget install jqlang.jq OpenJS.NodeJS`.
+3. Run `scripts/link.sh` as above. It writes hook paths as `C:/...` so Windows `node` can open them, and uses `%USERPROFILE%\.claude` and `%USERPROFILE%\.codex` (Git Bash's `~`).
+
+`.gitattributes` keeps every file LF (except `.ps1`), so the bash scripts still run after a Windows checkout. On Windows, ponytail's statusline uses `hooks/ponytail-statusline.ps1`.
