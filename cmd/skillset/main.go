@@ -10,8 +10,10 @@ import (
 
 const usage = `skillset links this repo's skills into your agent folders.
 
-  skillset init [path]   remember the skills clone (clones one if there is none)
-  skillset apply         link enabled skills, unlink the rest
+  skillset init [path]     remember the skills clone (clones one if there is none)
+  skillset enable <skill>  turn a skill on here, with what it requires
+  skillset disable <skill> turn it off, with the skills that require it
+  skillset apply           link enabled skills, unlink the rest
 `
 
 func main() {
@@ -29,12 +31,26 @@ func run(args []string, out io.Writer, in io.Reader) error {
 	switch cmd {
 	case "init":
 		return initCmd(args[1:], out, in)
+	case "enable":
+		return enableCmd(args[1:], out)
+	case "disable":
+		return disableCmd(args[1:], out)
 	case "apply":
 		cfg, err := loadConfig()
 		if err != nil {
 			return err
 		}
-		return apply(cfg, out)
+		deps, err := loadDeps(cfg.Repo)
+		if err != nil {
+			return err
+		}
+		if err := apply(cfg, out); err != nil {
+			return err
+		}
+		for _, w := range warnings(cfg, deps) {
+			fmt.Fprintln(out, w)
+		}
+		return nil
 	case "", "help", "-h", "--help":
 		fmt.Fprint(out, usage)
 		return nil

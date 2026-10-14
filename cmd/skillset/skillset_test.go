@@ -204,3 +204,95 @@ func mapsEqual(a, b map[string]string) bool {
 	}
 	return true
 }
+
+// depsRepo is a clone whose skills depend on each other: app -> core -> base,
+// with `nice` optional for app and `broken` needing a skill that isn't here.
+func depsRepo(t *testing.T) (home, repo string) {
+	t.Helper()
+	home, repo = setup(t, "app", "core", "base", "nice", "broken")
+	write(t, filepath.Join(repo, "sources.json"), `{"s": {"deps": {
+		"app":    {"requires": ["core"], "optional": ["nice"]},
+		"core":   {"requires": ["base"]},
+		"base":   {},
+		"nice":   {},
+		"broken": {"requires": ["ghost"]}
+	}}}`)
+	return home, repo
+}
+
+func enabled(t *testing.T) []string {
+	t.Helper()
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg.Enabled
+}
+
+func TestEnablePullsInWhatTheSkillRequires(t *testing.T) {
+	_, repo := depsRepo(t)
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}})
+
+	out := skillset(t, "enable", "app")
+
+	if got := enabled(t); !slices.Equal(got, []string{"app", "base", "core"}) {
+		t.Fatalf("enabled = %v, want app with its chain", got)
+	}
+	if !strings.Contains(out, "also enabled (required): base, core") {
+		t.Fatalf("output = %q, want the chain listed", out)
+	}
+	if !strings.Contains(out, "warning: app is enabled without nice (optional)") {
+		t.Fatalf("output = %q, want the optional warning", out)
+	}
+}
+
+func TestDisableCascadesToEverySkillThatRequiresIt(t *testing.T) {
+	_, repo := depsRepo(t)
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"app", "base", "core", "nice"}})
+
+	out := skillset(t, "disable", "base")
+
+	if got := enabled(t); !slices.Equal(got, []string{"nice"}) {
+		t.Fatalf("enabled = %v, want only the unrelated skill", got)
+	}
+	if !strings.Contains(out, "also disabled (they require it): app, core") {
+		t.Fatalf("output = %q, want the cascade listed", out)
+	}
+}
+
+func TestDisablingAnOptionalDependencyOnlyWarns(t *testing.T) {
+	_, repo := depsRepo(t)
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"app", "base", "core", "nice"}})
+
+	out := skillset(t, "disable", "nice")
+
+	if got := enabled(t); !slices.Equal(got, []string{"app", "base", "core"}) {
+		t.Fatalf("enabled = %v, want the dependent left alone", got)
+	}
+	if !strings.Contains(out, "warning: app is enabled without nice (optional)") {
+		t.Fatalf("output = %q, want a warning", out)
+	}
+}
+
+func TestCannotEnableASkillWhoseRequirementIsMissing(t *testing.T) {
+	_, repo := depsRepo(t)
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}})
+
+	err := run([]string{"enable", "broken"}, &bytes.Buffer{}, strings.NewReader(""))
+
+	if err == nil || !strings.Contains(err.Error(), "requires ghost, which isn't in the repo") {
+		t.Fatalf("err = %v, want the missing skill named", err)
+	}
+	if got := enabled(t); len(got) != 0 {
+		t.Fatalf("enabled = %v, want nothing changed", got)
+	}
+}
+
+func TestApplyPrintsCurrentWarnings(t *testing.T) {
+	_, repo := depsRepo(t)
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"app", "base", "core"}})
+
+	if out := skillset(t, "apply"); !strings.Contains(out, "warning: app is enabled without nice (optional)") {
+		t.Fatalf("output = %q, want the warning", out)
+	}
+}
