@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -81,6 +82,9 @@ func TestApplyRegistersHooksOfEnabledSkillsOnly(t *testing.T) {
 	home, repo := hooksRepo(t)
 	claude := filepath.Join(home, ".claude", "settings.json")
 	write(t, claude, foreign)
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o755); err != nil { // Codex is installed here
+		t.Fatal(err)
+	}
 	save(t, &Config{Repo: repo, Targets: []string{"claude", "agents"}, Enabled: []string{"ponytail"}})
 
 	skillset(t, "apply")
@@ -177,5 +181,64 @@ func TestApplyWritesNoHookConfigWhenThereAreNoHooks(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(home, ".codex", "hooks.json")); err == nil {
 		t.Fatal("want no hook config created for an agent that has none")
+	}
+}
+
+func TestHookBackupKeepsThePermissionsOfTheOriginal(t *testing.T) {
+	home, repo := hooksRepo(t)
+	claude := filepath.Join(home, ".claude", "settings.json")
+	write(t, claude, foreign)
+	if err := os.Chmod(claude, 0o600); err != nil { // as a config holding an API key would be
+		t.Fatal(err)
+	}
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"ponytail"}})
+
+	skillset(t, "apply")
+
+	for _, path := range []string{claude, claude + ".bak"} {
+		st, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Mode().Perm() != 0o600 {
+			t.Errorf("%s is %v, want the original 0600", filepath.Base(path), st.Mode().Perm())
+		}
+	}
+}
+
+func TestAHookConfigItCannotParseChangesNothingAtAll(t *testing.T) {
+	home, repo := hooksRepo(t)
+	write(t, filepath.Join(home, ".claude", "settings.json"), `{"hooks": []}`) // a shape we don't expect
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	save(t, &Config{Repo: repo, Targets: []string{"claude", "agents"}, Enabled: []string{"ponytail"}})
+
+	if err := run([]string{"apply"}, io.Discard, strings.NewReader("")); err == nil {
+		t.Fatal("want an error for a hooks block we can't read")
+	}
+
+	for _, dir := range []string{".claude", ".agents"} {
+		if got := entries(t, filepath.Join(home, dir, "skills")); len(got) != 0 {
+			t.Fatalf("%s = %v, want nothing linked before the configs were checked", dir, got)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "hooks.json")); err == nil {
+		t.Fatal("the second target should not have been written either")
+	}
+}
+
+func TestNoHookFileForAnAgentThatIsNotInstalled(t *testing.T) {
+	home, repo := hooksRepo(t)
+	write(t, filepath.Join(home, ".claude", "settings.json"), foreign)
+	save(t, &Config{Repo: repo, Targets: []string{"claude", "agents"}, Enabled: []string{"ponytail"}})
+
+	out := skillset(t, "apply")
+
+	if _, err := os.Stat(filepath.Join(home, ".codex")); err == nil {
+		t.Fatal("skillset must not create an agent folder of its own")
+	}
+	if !strings.Contains(out, "skip hooks: no") {
+		t.Fatalf("output = %q, want it to say the agent isn't here", out)
 	}
 }

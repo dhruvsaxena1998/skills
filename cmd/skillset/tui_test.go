@@ -189,3 +189,20 @@ func TestTUIRenders(t *testing.T) {
 	}
 	t.Log("\n" + view)
 }
+
+func TestTUIReadsADescriptionWrittenAsAYAMLBlock(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "skills", "base", "SKILL.md"), `---
+name: base
+description: >
+  Lazy senior dev mode: the smallest change that fully solves the task.
+  Levels: lite, full, ultra.
+---
+
+# base
+`)
+
+	if got := m.descriptionOf("base"); !strings.HasPrefix(got, "Lazy senior dev mode") || !strings.Contains(got, "Levels:") {
+		t.Fatalf("description = %q, want both lines of the block", got)
+	}
+}

@@ -42,6 +42,23 @@ func samePath(a, b string) bool {
 	return a == b
 }
 
+// sameDir reports whether two paths name the same folder, whatever spelling they use:
+// Windows ignores case, macOS usually does, Linux never does, so ask the filesystem.
+func sameDir(a, b string) bool {
+	if samePath(a, b) {
+		return true
+	}
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
+}
+
 // createLink links link -> dest and reports which kind of link it made.
 func createLink(dest, link string) (string, error) {
 	err := os.Symlink(dest, link)

@@ -334,3 +334,50 @@ func TestJunctionIsRecognisedAsOurLink(t *testing.T) {
 		t.Fatalf("folder = %v, want the junction pruned like any link of ours", got)
 	}
 }
+
+func TestApplyRelinksAfterTheCloneMoves(t *testing.T) {
+	home, repo := setup(t, "a")
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"a"}, Seen: []string{"a"}})
+	skillset(t, "apply")
+	moved := filepath.Join(filepath.Dir(repo), "moved-clone")
+	if err := os.Rename(repo, moved); err != nil {
+		t.Fatal(err)
+	}
+
+	skillset(t, "init", moved)
+	skillset(t, "apply")
+
+	link := filepath.Join(home, ".claude", "skills", "a")
+	if _, err := os.Stat(filepath.Join(link, "SKILL.md")); err != nil {
+		t.Fatalf("the link should point at the moved clone: %v", err)
+	}
+}
+
+func TestApplyOwnsItsLinksWhateverTheRepoPathLooksLike(t *testing.T) {
+	home, repo := setup(t, "a")
+	other := strings.ToUpper(filepath.Base(repo))
+	if _, err := os.Stat(filepath.Join(filepath.Dir(repo), other)); err != nil {
+		t.Skip("case-sensitive filesystem: one folder really is two paths here")
+	}
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"a"}, Seen: []string{"a"}})
+	skillset(t, "apply")
+
+	// the same clone, spelled differently, as Windows and macOS both allow
+	save(t, &Config{Repo: filepath.Join(filepath.Dir(repo), other), Targets: []string{"claude"}, Seen: []string{"a"}})
+	skillset(t, "apply")
+
+	if got := entries(t, filepath.Join(home, ".claude", "skills")); len(got) != 0 {
+		t.Fatalf("folder = %v, want our link gone even under the other spelling", got)
+	}
+}
+
+func TestDisableRefusesANameItDoesNotKnow(t *testing.T) {
+	_, repo := setup(t, "a")
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"a"}})
+
+	err := run([]string{"disable", "ponytial"}, &bytes.Buffer{}, strings.NewReader(""))
+
+	if err == nil || !strings.Contains(err.Error(), "no skill named") {
+		t.Fatalf("err = %v, want a typo to be refused, not reported as done", err)
+	}
+}

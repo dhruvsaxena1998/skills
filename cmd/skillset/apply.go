@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 )
 
 // apply makes the agent folders match the selection: enabled skills linked into enabled
@@ -22,16 +21,19 @@ func apply(cfg *Config, out io.Writer, dry bool) error {
 		return fmt.Errorf("no skills folder in %s: %w", cfg.Repo, err)
 	}
 
+	// a hook config we can't parse must not leave one target changed and the other not
+	for _, t := range targets {
+		if err := syncHooks(filepath.Join(home, t.hooks), cfg.Repo, enabledFor(cfg, t), io.Discard, true); err != nil {
+			return err
+		}
+	}
 	for _, d := range legacyDirs {
 		prune(filepath.Join(home, d), skillsDir, nil, out, dry)
 	}
 	for _, t := range targets {
 		dir := filepath.Join(home, t.dir)
 		on := slices.Contains(cfg.Targets, t.name)
-		enabled := cfg.Enabled
-		if !on {
-			enabled = nil // a target that is off keeps neither links nor hooks of ours
-		}
+		enabled := enabledFor(cfg, t)
 		prune(dir, skillsDir, enabled, out, dry)
 		if err := syncHooks(filepath.Join(home, t.hooks), cfg.Repo, enabled, out, dry); err != nil {
 			return err
@@ -53,6 +55,14 @@ func apply(cfg *Config, out io.Writer, dry bool) error {
 	return nil
 }
 
+// enabledFor is what a target should hold: nothing at all when the target is off.
+func enabledFor(cfg *Config, t target) []string {
+	if !slices.Contains(cfg.Targets, t.name) {
+		return nil
+	}
+	return cfg.Enabled
+}
+
 // prune removes links in dir that point into skillsDir unless they are a correct link
 // for a kept skill. Links pointing anywhere else, and real files, are left alone.
 func prune(dir, skillsDir string, keep []string, out io.Writer, dry bool) {
@@ -63,8 +73,10 @@ func prune(dir, skillsDir string, keep []string, out io.Writer, dry bool) {
 	for _, e := range entries {
 		name := e.Name()
 		path := filepath.Join(dir, name)
+		// ours point one level into the repo's skills folder; compare the way the
+		// platform does, since Windows and macOS both spell one folder several ways
 		dest := linkDest(path)
-		if dest == "" || !strings.HasPrefix(dest, skillsDir+string(filepath.Separator)) {
+		if dest == "" || !sameDir(filepath.Dir(dest), skillsDir) {
 			continue
 		}
 		if slices.Contains(keep, name) && samePath(dest, filepath.Join(skillsDir, name)) && isSkill(skillsDir, name) {
@@ -92,13 +104,24 @@ func link(dir, skillsDir, name string, out io.Writer, dry bool) error {
 	if samePath(linkDest(path), dest) {
 		return nil
 	}
+	stale := false
 	if _, err := os.Lstat(path); err == nil {
-		fmt.Fprintf(out, "skip %s: exists and isn't from this repo\n", path)
-		return nil
+		// a link whose target has gone is one of ours from before the clone moved
+		_, live := os.Stat(path)
+		if linkDest(path) == "" || live == nil {
+			fmt.Fprintf(out, "skip %s: exists and isn't from this repo\n", path)
+			return nil
+		}
+		stale = true
 	}
 	if dry {
 		fmt.Fprintf(out, "link %s\n", path)
 		return nil
+	}
+	if stale {
+		if err := os.Remove(path); err != nil {
+			return err
+		}
 	}
 	kind, err := createLink(dest, path)
 	if err != nil {

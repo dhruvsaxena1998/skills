@@ -100,8 +100,9 @@ func offerClone(out io.Writer, in io.Reader) (string, error) {
 	if err != nil && line == "" {
 		return "", errNotSetUp
 	}
-	switch answer := strings.TrimSpace(line); answer {
-	case "n", "N", "no":
+	answer := strings.TrimSpace(line)
+	switch strings.ToLower(answer) {
+	case "n", "no", "q", "quit", "cancel":
 		return "", errNotSetUp
 	case "":
 	default:

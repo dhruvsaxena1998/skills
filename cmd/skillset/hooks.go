@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -64,7 +65,14 @@ func syncHooks(path, repo string, enabled []string, out io.Writer, dry bool) err
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		if len(ours) == 0 {
-			return nil // don't create a config for an agent that has none
+			return nil
+		}
+		// give an installed agent its first hooks file, but never invent the agent itself
+		if _, err := os.Stat(filepath.Dir(path)); err != nil {
+			if !dry {
+				fmt.Fprintf(out, "skip hooks: no %s on this machine\n", filepath.Dir(path))
+			}
+			return nil
 		}
 	case err != nil:
 		return err
@@ -120,15 +128,20 @@ func syncHooks(path, repo string, enabled []string, out io.Writer, dry bool) err
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// keep the config's own permissions: it can hold an API key the owner locked down
+	mode := fs.FileMode(0o600)
+	if st, err := os.Stat(path); err == nil {
+		mode = st.Mode().Perm()
+	}
+	if err := os.WriteFile(path+".bak", data, mode); err != nil {
 		return err
 	}
-	if data != nil {
-		if err := os.WriteFile(path+".bak", data, 0o644); err != nil {
-			return err
-		}
+	// write beside it and swap, so a crash can't leave a half-written agent config
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(pretty, '\n'), mode); err != nil {
+		return err
 	}
-	if err := os.WriteFile(path, append(pretty, '\n'), 0o644); err != nil {
+	if err := os.Rename(tmp, path); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "hooks updated in %s\n", path)

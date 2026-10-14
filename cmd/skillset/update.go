@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 )
 
@@ -65,10 +64,11 @@ func latestRelease(api string) (tag, url string, err error) {
 	if err := json.NewDecoder(body).Decode(&rel); err != nil {
 		return "", "", fmt.Errorf("read the latest release: %w", err)
 	}
-	// Match on the platform, not the whole file name, which carries .exe on Windows.
-	platform := runtime.GOOS + "_" + runtime.GOARCH
+	// The exact names .goreleaser.yaml produces, so a checksum or signature file for
+	// the same platform can never be downloaded over the binary.
+	platform := "skillset_" + runtime.GOOS + "_" + runtime.GOARCH
 	for _, a := range rel.Assets {
-		if strings.Contains(a.Name, platform) {
+		if a.Name == platform || a.Name == platform+".exe" {
 			return rel.TagName, a.URL, nil
 		}
 	}

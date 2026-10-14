@@ -169,7 +169,7 @@ func (m *model) unmanaged() []row {
 		}
 		for _, e := range entries {
 			dest := linkDest(filepath.Join(dir, e.Name()))
-			if strings.HasPrefix(dest, skillsDir+string(filepath.Separator)) {
+			if dest != "" && sameDir(filepath.Dir(dest), skillsDir) {
 				continue
 			}
 			where := "folder"
@@ -261,6 +261,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) key(msg tea.KeyMsg) tea.Cmd {
+	if msg.String() == "ctrl+c" {
+		return tea.Quit // before the filter and review screens, which swallow keys
+	}
 	if m.typing {
 		switch msg.String() {
 		case "enter", "esc":
@@ -291,8 +294,6 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 	}
 
 	switch msg.String() {
-	case "ctrl+c":
-		return tea.Quit
 	case "q":
 		if m.dirty && !m.asked {
 			m.asked = true
@@ -358,7 +359,7 @@ func (m *model) toggle() {
 		return
 	}
 	r := m.rows[m.shown[m.cursor]]
-	m.cascade, m.dirty, m.asked = "", true, false
+	m.cascade, m.asked = "", false
 	switch r.kind {
 	case rowTarget:
 		if i := slices.Index(m.cfg.Targets, r.name); i >= 0 {
@@ -367,12 +368,13 @@ func (m *model) toggle() {
 		} else {
 			m.cfg.Targets = append(m.cfg.Targets, r.name)
 		}
+		m.dirty = true
 	case rowSource:
 		m.toggleSource(r.name)
 	case rowSkill:
 		m.toggleSkill(r.name)
 	default:
-		m.dirty = false // headers and foreign entries aren't ours to change
+		return // headers and foreign entries aren't ours to change, and clear nothing
 	}
 	m.build()
 }
@@ -396,13 +398,13 @@ func (m *model) toggleSkill(name string) {
 			slices.Sort(also)
 			m.cascade += " — also off, they require it: " + strings.Join(also, ", ")
 		}
+		m.dirty = true
 		return
 	}
 	var want []string
 	if err := withRequires(name, m.deps, skillsDir, &want); err != nil {
 		m.cascade = "can't enable " + name + ": " + err.Error()
-		m.dirty = false
-		return
+		return // nothing changed, so earlier changes stay unsaved
 	}
 	var also []string
 	for _, n := range want {
@@ -413,7 +415,7 @@ func (m *model) toggleSkill(name string) {
 			}
 		}
 	}
-	m.cascade = "on: " + name
+	m.cascade, m.dirty = "on: "+name, true
 	if len(also) > 0 {
 		slices.Sort(also)
 		m.cascade += " — also on, it requires them: " + strings.Join(also, ", ")
@@ -483,18 +485,17 @@ const help = "space toggle · / filter · s review and save · p pull · q quit"
 
 func (m *model) View() string {
 	if m.review != nil {
-		body := strings.Join(m.review, "\n")
-		return bold.Render("review") + "\n\n" + body + "\n\n" +
+		fits := max(5, m.height-6)
+		body := m.review
+		more := ""
+		if len(body) > fits {
+			more = dim.Render(fmt.Sprintf("\n… and %d more", len(body)-fits))
+			body = body[:fits]
+		}
+		return bold.Render("review ") + dim.Render(countPlan(m.review)) + "\n\n" +
+			strings.Join(body, "\n") + more + "\n\n" +
 			dim.Render("enter applies this · esc goes back")
 	}
-
-	detailW := max(30, m.width/3)
-	listW := max(30, m.width-detailW-3)
-	rows := m.list(listW)
-	panes := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(listW).Render(rows),
-		dim.Render(" │ "),
-		lipgloss.NewStyle().Width(detailW).Render(m.detail()))
 
 	var foot []string
 	if m.cascade != "" {
@@ -506,6 +507,14 @@ func (m *model) View() string {
 	if m.status != "" {
 		foot = append(foot, dim.Render(m.status))
 	}
+	detailW := max(30, m.width/3)
+	listW := max(30, m.width-detailW-3)
+	rows := m.list(listW, max(5, m.height-len(foot)-5))
+	panes := lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(listW).Render(rows),
+		dim.Render(" │ "),
+		lipgloss.NewStyle().Width(detailW).Render(m.detail()))
+
 	filter := ""
 	if m.typing || m.filter != "" {
 		filter = "  filter: " + m.filter + "▌"
@@ -515,8 +524,7 @@ func (m *model) View() string {
 }
 
 // list renders the visible slice of rows, keeping the cursor on screen.
-func (m *model) list(width int) string {
-	height := max(8, m.height-9)
+func (m *model) list(width, height int) string {
 	if m.cursor < m.top {
 		m.top = m.cursor
 	}
@@ -572,6 +580,22 @@ func (m *model) line(r row) string {
 	default:
 		return dim.Render("  " + r.name + "  " + r.note)
 	}
+}
+
+// countPlan summarises a review, which is longer than the screen on a first apply.
+func countPlan(plan []string) string {
+	var links, unlinks, hooks int
+	for _, line := range plan {
+		switch {
+		case strings.HasPrefix(line, "link "):
+			links++
+		case strings.HasPrefix(line, "unlink "):
+			unlinks++
+		case strings.HasPrefix(line, "update hooks"):
+			hooks++
+		}
+	}
+	return fmt.Sprintf("%d links · %d unlinks · %d hook files", links, unlinks, hooks)
 }
 
 func (m *model) box(checked bool) string {
@@ -653,13 +677,35 @@ func (m *model) descriptionOf(name string) string {
 	if err != nil {
 		return ""
 	}
-	for _, line := range strings.Split(string(body), "\n") {
-		if after, ok := strings.CutPrefix(line, "description:"); ok {
-			m.desc[name] = strings.Trim(strings.TrimSpace(after), `"`)
-			break
+	rows := strings.Split(string(body), "\n")
+	for i, line := range rows {
+		after, ok := strings.CutPrefix(line, "description:")
+		if !ok {
+			continue
 		}
+		value := strings.TrimSpace(after)
+		if value == "" || value == ">" || value == "|" || value == ">-" || value == "|-" {
+			value = blockValue(rows[i+1:]) // YAML folded or literal: the text is below
+		}
+		m.desc[name] = strings.Trim(value, `"`)
+		break
 	}
 	return m.desc[name]
+}
+
+// blockValue joins the indented lines of a YAML block scalar into one line.
+func blockValue(rows []string) string {
+	var parts []string
+	for _, row := range rows {
+		if strings.TrimSpace(row) == "" {
+			break
+		}
+		if !strings.HasPrefix(row, " ") && !strings.HasPrefix(row, "\t") {
+			break
+		}
+		parts = append(parts, strings.TrimSpace(row))
+	}
+	return strings.Join(parts, " ")
 }
 
 // patchesFor lists this repo's own commits against the skill, by the patch( convention.

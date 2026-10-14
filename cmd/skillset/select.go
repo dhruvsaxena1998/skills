@@ -46,6 +46,9 @@ func disableCmd(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if !isSkill(filepath.Join(cfg.Repo, "skills"), name) && !slices.Contains(cfg.Enabled, name) {
+		return fmt.Errorf("no skill named %q, and nothing by that name is enabled", name)
+	}
 	var drop []string
 	withDependents(name, deps, &drop)
 
