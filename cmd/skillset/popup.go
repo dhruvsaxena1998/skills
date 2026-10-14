@@ -27,8 +27,9 @@ var bindings = []binding{
 	{"selection", "← → · h l", "on the skills step, between the sources and their skills", "←→ columns"},
 	{"selection", "enter", "read the skill's SKILL.md", ""},
 	{"selection", "tab", "the next step: targets, then the review", "tab next step"},
+	{"selection", "shift+tab", "the step before", "shift+tab back"},
 	{"selection", "/", "filter the skills by name", "/ filter"},
-	{"selection", "?", "this list, the theme and the spacing", "? keys"},
+	{"selection", "?", "the settings and this list", "? keys"},
 	{"selection", "s", "review what a save would change", "s review"},
 	{"selection", "p", "pull the repo", "p pull"},
 	{"selection", "esc · q", "go back one: the filter, then the step, then quit (asking once when something is unsaved)", "esc back"},
@@ -43,12 +44,12 @@ var bindings = []binding{
 	{"review", "enter", "apply the plan", "enter applies this"},
 	{"review", "esc · q", "go back", "esc goes back"},
 
-	{"overlay", "↑ ↓", "scroll", "↑↓ scroll"},
+	{"overlay", "↑ ↓ · tab", "move between the settings and the key list, which scrolls", "↑↓ move"},
+	// not on the rail: the settings carry their own keys, and a SKILL.md shares
+	// this rail line without having any of them
+	{"overlay", "space · ←→", "change the setting under the cursor, enter too", ""},
+	{"overlay", "1 … 9", "pick that theme straight off, written as you press it", ""},
 	{"overlay", "k j", "scroll a SKILL.md, where letters are not a search", ""},
-	// not on the rail: the pickers already carry their own keys, and a SKILL.md
-	// shares this rail line without having any
-	{"overlay", "1 … 9", "pick that theme, written as you press it", ""},
-	{"overlay", "0", "compact rows, or comfortable", ""},
 	{"overlay", "esc · q", "clear the search, then close it where you were; in this list q is text, so only esc", "esc goes back"},
 }
 
@@ -65,46 +66,88 @@ func railLine(mode string) string {
 }
 
 // popKey is the overlay's own keys. Both popups scroll the same way; only the
-// keys one takes typing, since a SKILL.md has nothing to search, and only there
-// does esc have a search to take back before it closes anything.
+// keys one takes typing and carries the settings, since a SKILL.md has nothing
+// to search, and only there does esc have a search to take back first.
 func (m *model) popKey(msg tea.KeyMsg) {
-	switch key := msg.String(); {
-	// esc takes back one thing per press, so a search goes before the popup does
-	case key == "esc" && m.pop == "keys" && m.query != "":
-		m.query = ""
-		m.popBody, m.popTop = m.keysBody(), 0
-	case key == "esc":
-		m.pop, m.popBody, m.popTop, m.query = "", nil, 0, ""
-	case key == "up":
-		m.popTop--
-	case key == "down":
-		m.popTop++
-	case m.pop != "keys":
-		if key == "k" { // a SKILL.md has nothing to search, so letters scroll it too
+	key := msg.String()
+	if m.pop != "keys" {
+		switch key {
+		case "esc":
+			m.pop, m.popBody, m.popTop = "", nil, 0
+		case "up", "k": // a SKILL.md has nothing to search, so letters scroll it too
 			m.popTop--
-		}
-		if key == "j" {
+		case "down", "j":
 			m.popTop++
 		}
-	// no key in the table is written with a digit, so digits are free for the
-	// pickers: 1-9 the themes, 0 the density. Every letter, q included, stays a
-	// character in the search box.
-	case key == "0":
-		m.flipDensity()
-		m.popBody = m.keysBody()
+		return
+	}
+	switch {
+	// esc takes back one thing per press, so a search goes before the popup does
+	case key == "esc" && m.query != "":
+		m.query, m.popTop = "", 0
+	case key == "esc":
+		m.pop, m.popBody, m.popTop, m.query = "", nil, 0, ""
+		return
+	case key == "tab":
+		settingAt = (settingAt + 1) % (len(settings) + 1)
+	case key == "up":
+		if settingAt == len(settings) && m.popTop > 0 {
+			m.popTop--
+		} else {
+			settingAt = max(settingAt-1, 0)
+		}
+	case key == "down":
+		if settingAt == len(settings) {
+			m.popTop++
+		} else {
+			settingAt++
+		}
+	case key == "left":
+		m.stepSetting(-1)
+	// enter and the arrows are never text; space is, once you are searching or
+	// the cursor has left the settings for the list
+	case key == "right", key == "enter", key == " " && m.query == "" && settingAt < len(settings):
+		m.stepSetting(1)
+	// no key in the table is written with a digit, so digits stay free for the
+	// themes. Every letter, q included, is a character in the search box.
 	case len(key) == 1 && key[0] >= '1' && key[0] <= '9':
 		if names := themeNames(); int(key[0]-'1') < len(names) {
 			m.setTheme(names[key[0]-'1'])
-			m.popBody = m.keysBody()
 		}
 	case key == "backspace":
 		if m.query != "" {
 			m.query = m.query[:len(m.query)-1]
 		}
-		m.popBody, m.popTop = m.keysBody(), 0
+		m.popTop = 0
 	case len(msg.Runes) > 0:
 		m.query += string(msg.Runes)
-		m.popBody, m.popTop = m.keysBody(), 0
+		m.popTop = 0
+	}
+	if settingAt < len(settings) {
+		m.popTop = 0 // a cursor you cannot see is worse than losing your place
+	}
+	m.popBody = m.keysBody()
+}
+
+// settings are the overlay's rows, in the order they are drawn. The cursor also
+// stops one past the end, on the key list, which is where it scrolls.
+var settings = []string{"theme"}
+
+// settingAt is the row the cursor is on. It lives beside the list because the
+// overlay is the only thing that reads it.
+var settingAt int
+
+// stepSetting moves the focused setting n places along its options, wrapping,
+// and writes it: a setting is this machine's look, not part of the selection
+// that the review flow saves.
+func (m *model) stepSetting(n int) {
+	if settingAt >= len(settings) {
+		return // the cursor is on the key list, which has nothing to change
+	}
+	switch settings[settingAt] {
+	case "theme":
+		names := themeNames()
+		m.setTheme(names[(slices.Index(names, m.themeName())+n+len(names))%len(names)])
 	}
 }
 
@@ -128,19 +171,6 @@ func (m *model) setTheme(name string) {
 	}
 }
 
-// flipDensity swaps the two, taking effect and being written at once for the
-// same reason setTheme is.
-func (m *model) flipDensity() {
-	if m.comfortable() {
-		m.cfg.Density = "compact"
-	} else {
-		m.cfg.Density = "comfortable"
-	}
-	if err := m.cfg.save(); err != nil {
-		m.status = err.Error()
-	}
-}
-
 // themeName is the theme actually on screen, which an unknown name in the config
 // is not.
 func (m *model) themeName() string {
@@ -151,25 +181,23 @@ func (m *model) themeName() string {
 }
 
 func (m *model) openKeys() {
-	m.pop, m.popTop, m.query = "keys", 0, ""
+	m.pop, m.popTop, m.query, settingAt = "keys", 0, "", 0
 	m.popBody = m.keysBody()
 }
 
-// keysBody is the keys overlay: the theme picker, then every binding the table
-// knows, narrowed by what you have typed. The picker is first because it is the
-// half you act on, and a long key list would push it off a short screen.
+// keysBody is the keys overlay: the settings you can change, then every binding
+// the table knows, narrowed by what you have typed. The settings are first
+// because they are the half you act on, and a long key list would push them off
+// a short screen.
 func (m *model) keysBody() []string {
 	head := ui.text.Bold(true).Render("keys") + ui.dim.Render("  ·  type to search  ·  esc goes back")
 	if m.query != "" {
 		head = ui.text.Bold(true).Render("keys") + ui.dim.Render("  matching ") + ui.text.Render(m.query) + ui.label.Render("\u258c")
 	}
-	row, here := "", m.themeName()
-	for i, name := range themeNames() {
-		row += pick(fmt.Sprintf("%d %s", i+1, name), name == here)
+	out := []string{head, "", ui.dim.Render("SETTINGS")}
+	for i := range settings {
+		out = append(out, m.settingRow(i))
 	}
-	air := pick("compact", !m.comfortable()) + pick("comfortable", m.comfortable())
-	out := []string{head, "", ui.dim.Render("THEME"), "  " + row,
-		"", ui.dim.Render("DENSITY"), "  " + air}
 
 	mode, found := "", false
 	for _, b := range bindings {
@@ -187,6 +215,23 @@ func (m *model) keysBody() []string {
 	return out
 }
 
+// settingRow is one setting: the selection bar as a cursor when it has focus,
+// its name, then its options with the one in force filled in.
+func (m *model) settingRow(i int) string {
+	cursor := "  "
+	if i == settingAt {
+		cursor = ui.bar.Render(" ") + " "
+	}
+	opts := ""
+	switch settings[i] {
+	case "theme":
+		for n, name := range themeNames() {
+			opts += pick(fmt.Sprintf("%d %s", n+1, name), name == m.themeName())
+		}
+	}
+	return cursor + ui.text.Render(fit(settings[i], 8)) + opts
+}
+
 // openSkill puts a skill's SKILL.md over the screen, rendered.
 func (m *model) openSkill(name string) {
 	path := filepath.Join(m.cfg.Repo, "skills", name, "SKILL.md")
@@ -199,9 +244,9 @@ func (m *model) openSkill(name string) {
 		m.popBody = []string{head, "", ui.warn.Render("can't read " + path), ui.dim.Render(err.Error())}
 		return
 	}
-	// the box takes the whole width, but the prose inside it stops at a measure
-	// that is still readable on a very wide terminal
-	m.popBody = append([]string{head, ""}, lines(markdown(skipFrontmatter(string(body)), min(m.popWidth()-4, 100)))...)
+	// the prose takes the whole box: a cap on the measure is what left the file
+	// sitting in 80 columns on a wide terminal
+	m.popBody = append([]string{head, ""}, lines(markdown(skipFrontmatter(string(body)), m.popWidth()-4))...)
 }
 
 // resizePop re-wraps a SKILL.md after the terminal changes size, keeping your

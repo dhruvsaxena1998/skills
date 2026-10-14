@@ -13,6 +13,9 @@ import (
 
 func esc(m *model) { m.key(tea.KeyMsg{Type: tea.KeyEsc}) }
 
+// tap presses a key that carries no text, which press() cannot spell.
+func tap(m *model, k tea.KeyType) { m.key(tea.KeyMsg{Type: k}) }
+
 var sgr = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 // plain is the text without its colours: glamour styles word by word, so a
@@ -84,7 +87,7 @@ func TestKeysOverlayListsEveryBoundKey(t *testing.T) {
 	press(m, "?")
 
 	body := plain(strings.Join(m.popBody, "\n"))
-	for _, want := range []string{"space", "x", "h l", "enter", "/", "?", "s", "p", "q", "esc", "THEME"} {
+	for _, want := range []string{"space", "x", "h l", "enter", "/", "?", "s", "p", "q", "esc", "SETTINGS"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the keys overlay never mentions %q", want)
 		}
@@ -177,37 +180,119 @@ func TestKeysOverlayPicksAThemeAndWritesIt(t *testing.T) {
 	}
 }
 
-// TestDensityPickerWritesItAtOnce: the spacing is this machine's look, so like a
-// theme it lands and is written on the keypress rather than riding the save flow.
-func TestDensityPickerWritesItAtOnce(t *testing.T) {
+// TestSettingsRowChangesUnderTheCursor: the overlay used to be the one screen
+// with its own interaction model. The setting under the cursor now moves on
+// space, enter and the arrows, like every other row in the app.
+func TestSettingsRowChangesUnderTheCursor(t *testing.T) {
+	defer useTheme(defaultTheme)
 	m, _, _ := tuiModel(t)
-	if m.comfortable() {
-		t.Fatalf("density = %q, want an empty config to read as compact", m.cfg.Density)
-	}
 	press(m, "?")
+	if settingAt != 0 {
+		t.Fatalf("the overlay opened with the cursor at %d, want it on the first setting", settingAt)
+	}
 
-	press(m, "0")
+	names := themeNames()
+	press(m, " ")
+	if m.cfg.Theme != names[1] || ui.theme.Accent != themes[names[1]].Accent {
+		t.Fatalf("space gave theme %q on a %v screen, want %q on both", m.cfg.Theme, ui.theme.Accent, names[1])
+	}
+	tap(m, tea.KeyRight)
+	if m.cfg.Theme != names[2] {
+		t.Fatalf("theme = %q, want → to step to %q", m.cfg.Theme, names[2])
+	}
+	tap(m, tea.KeyLeft)
+	if m.cfg.Theme != names[1] {
+		t.Fatalf("theme = %q, want ← to step back to %q", m.cfg.Theme, names[1])
+	}
+	press(m, "enter")
+	if m.cfg.Theme != names[2] {
+		t.Fatalf("theme = %q, want enter to step to %q", m.cfg.Theme, names[2])
+	}
 
-	if m.cfg.Density != "comfortable" || !m.comfortable() {
-		t.Fatalf("density = %q, want the key to turn the air on", m.cfg.Density)
+	for range names { // round the end and back to where it was
+		tap(m, tea.KeyRight)
+	}
+	if m.cfg.Theme != names[2] {
+		t.Fatalf("theme = %q after a full lap, want %q", m.cfg.Theme, names[2])
 	}
 	if m.dirty {
-		t.Fatal("the spacing is not an unsaved selection change")
+		t.Fatal("a theme is not an unsaved selection change")
 	}
 	cfg, err := loadConfig()
-	if err != nil || cfg.Density != "comfortable" {
-		t.Fatalf("the config on disk says %q (%v), want it written as it was pressed", cfg.Density, err)
+	if err != nil || cfg.Theme != names[2] {
+		t.Fatalf("the config on disk says %q (%v), want every step written as it was pressed", cfg.Theme, err)
 	}
-	if !strings.Contains(plain(strings.Join(m.popBody, "\n")), "DENSITY") {
-		t.Fatal("the overlay should show the picker it just changed")
+	if body := plain(strings.Join(m.popBody, "\n")); !strings.Contains(body, "SETTINGS") || !strings.Contains(body, names[2]) {
+		t.Fatalf("the settings list should still show the row it just changed:\n%s", body)
+	}
+}
+
+// TestSettingsCursorStepsIntoTheKeyList: the cursor stops past the last setting,
+// on the list, which is the only thing in the overlay long enough to scroll.
+func TestSettingsCursorStepsIntoTheKeyList(t *testing.T) {
+	defer useTheme(defaultTheme)
+	m, _, _ := tuiModel(t)
+	press(m, "?")
+
+	tap(m, tea.KeyDown)
+	if settingAt != len(settings) {
+		t.Fatalf("settingAt = %d after one ↓, want the cursor off the settings and on the list", settingAt)
+	}
+	tap(m, tea.KeyDown)
+	if m.popTop != 1 {
+		t.Fatalf("popTop = %d, want the list to scroll once the cursor is on it", m.popTop)
+	}
+	tap(m, tea.KeyUp)
+	tap(m, tea.KeyUp)
+	if settingAt != 0 || m.popTop != 0 {
+		t.Fatalf("settingAt = %d popTop = %d, want ↑ back to the top of the list and then onto the setting", settingAt, m.popTop)
 	}
 
-	press(m, "0")
-	if m.cfg.Density != "compact" || m.comfortable() {
-		t.Fatalf("density = %q, want the same key to put it back", m.cfg.Density)
+	press(m, "tab")
+	if settingAt != len(settings) {
+		t.Fatalf("tab left the cursor at %d, want it on the list", settingAt)
 	}
-	if cfg, err := loadConfig(); err != nil || cfg.Density != "compact" {
-		t.Fatalf("the config on disk says %q (%v), want the way back written too", cfg.Density, err)
+	press(m, "tab")
+	if settingAt != 0 {
+		t.Fatalf("tab left the cursor at %d, want it round to the first setting", settingAt)
+	}
+	press(m, " ") // nothing to change while the cursor is on the list is not a panic
+	tap(m, tea.KeyDown)
+	press(m, " ")
+	press(m, "enter")
+}
+
+// TestSettingsSearchKeepsSpaceAsText: typing still filters the key list, so a
+// space mid-search is a character and only the keys that are never text reach
+// the setting.
+func TestSettingsSearchKeepsSpaceAsText(t *testing.T) {
+	defer useTheme(defaultTheme)
+	m, _, _ := tuiModel(t)
+	press(m, "?")
+	before := m.themeName()
+
+	press(m, "the")
+	press(m, " ")
+	press(m, "repo")
+
+	if m.query != "the repo" {
+		t.Fatalf("query = %q, want the space typed into the search", m.query)
+	}
+	if m.themeName() != before {
+		t.Fatalf("the search changed the theme to %q", m.themeName())
+	}
+	body := plain(strings.Join(m.popBody, "\n"))
+	if !strings.Contains(body, "pull the repo") || strings.Contains(body, "apply the plan") {
+		t.Fatalf("searching for %q gave:\n%s", m.query, body)
+	}
+
+	tap(m, tea.KeyRight)
+	if m.themeName() == before {
+		t.Fatal("the arrows are not text, so they should still reach the setting while a search is up")
+	}
+	press(m, "2")
+	if m.themeName() != themeNames()[1] {
+		t.Fatalf("theme = %q, want the digit to stay a shortcut straight to it", m.themeName())
 	}
 }
 
@@ -225,8 +310,8 @@ func TestPopupTakesTheWholeWidthAndRewraps(t *testing.T) {
 		t.Fatalf("popWidth = %d on a 200-column screen, want the box to use it", w)
 	}
 	wide := widest(m.popBody)
-	if wide <= 80 {
-		t.Fatalf("the widest line is %d columns, want the prose past the old 80", wide)
+	if wide <= 140 {
+		t.Fatalf("the widest line is %d columns on a 200-column screen, want the prose uncapped", wide)
 	}
 
 	m.popTop = 3
