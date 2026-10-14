@@ -1,6 +1,30 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+// TestEveryThemeFillsEveryColourField walks the struct rather than a list of
+// names, so a role added later can't be left empty in a theme and render black
+// on black until someone runs that theme.
+func TestEveryThemeFillsEveryColourField(t *testing.T) {
+	defer useTheme(defaultTheme)
+	colour := reflect.TypeOf(lipgloss.Color(""))
+	for name, th := range themes {
+		v := reflect.ValueOf(th)
+		for i := range v.NumField() {
+			if v.Type().Field(i).Type != colour {
+				continue
+			}
+			if c := v.Field(i).String(); len(c) != 7 || c[0] != '#' {
+				t.Errorf("theme %q has %s = %q, want a hex colour", name, v.Type().Field(i).Name, c)
+			}
+		}
+	}
+}
 
 // TestThemeFallsBackToTheDefault: a name nobody ever added must still give a
 // usable screen rather than a blank one.

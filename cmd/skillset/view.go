@@ -118,12 +118,13 @@ func (m *model) columns(h int) string {
 	// the descriptions move inline instead; the description is never absent from both
 	showDetail := m.width >= 90
 	inline := !showDetail || m.width >= 120
-	// the detail pane is where a choice is actually made, so it takes a quarter of
-	// a wide screen; the skills column keeps the rest and the sources need little
-	sourceW, detailW := 16, max(40, m.width/4)
-	skillW := max(24, m.width-23)
+	// the sources column holds the longest source name and its tally side by side;
+	// the detail pane is where a choice is actually made, so it takes a quarter of a
+	// wide screen, and the skills column is whatever the two of them leave
+	sourceW, detailW := 20, max(36, m.width/4)
+	skillW := max(24, m.width-sourceW-7)
 	if showDetail {
-		skillW = max(24, m.width-detailW-26)
+		skillW = max(24, m.width-sourceW-detailW-10)
 	}
 
 	c1, sel1, hit1 := m.firstColumn(sourceW)
@@ -201,7 +202,7 @@ func (m *model) firstColumn(width int) ([]string, int, []int) {
 			styled = ui.dim.Render(plain)
 		}
 		if i == here {
-			sel, styled = len(out), ui.bar.Render(fit(plain, width))
+			sel, styled = len(out), selected(plain, width)
 		}
 		out, hits = append(out, styled), append(hits, slices.Index(m.shown, i))
 	}
@@ -276,7 +277,7 @@ func (m *model) skillColumn(width int, inline bool) ([]string, int, []int) {
 			plain, styled = plain+badgePlain, styled+badge
 		}
 		if i == m.cursor {
-			sel, styled = len(out), ui.bar.Render(fit(plain, width))
+			sel, styled = len(out), selected(plain, width)
 		}
 		out, hits = append(out, styled), append(hits, i)
 	}
@@ -382,12 +383,29 @@ func (m *model) reviewPane(h int) string {
 	}
 	out := []string{"  " + ui.text.Bold(true).Render("review") + "  " + ui.dim.Render(countPlan(m.review)), ""}
 	for _, line := range body {
-		out = append(out, "  "+ui.text.Render(trunc(line, max(10, m.width-4))))
+		sign, rest, style := reviewLine(line)
+		out = append(out, "  "+style.Render(sign+" "+trunc(rest, max(10, m.width-6))))
 	}
 	if more != "" {
 		out = append(out, more)
 	}
 	return strings.Join(out, "\n")
+}
+
+// reviewLine reads a plan line as a diff: a link adds a file, an unlink takes one
+// away, and a hook edit changes a file that is there either way. The sign carries
+// the verb, so the path gets the width instead.
+func reviewLine(line string) (sign, rest string, style lipgloss.Style) {
+	switch {
+	case strings.HasPrefix(line, "link "):
+		return "+", strings.TrimPrefix(line, "link "), ui.ok
+	case strings.HasPrefix(line, "unlink "):
+		return "-", strings.TrimPrefix(line, "unlink "), ui.drop
+	case strings.HasPrefix(line, "update hooks"):
+		return "~", strings.TrimPrefix(line, "update "), ui.label
+	}
+	// a skip, or nothing to change: no sign, but indented to the same column
+	return " ", line, ui.text
 }
 
 // countPlan summarises a review, which is longer than the screen on a first apply.
@@ -495,6 +513,14 @@ func (m *model) skillDetail(r row) string {
 func pair(left, right string, width int) string {
 	gap := max(1, width-lipgloss.Width(left)-lipgloss.Width(right)-3)
 	return "  " + left + strings.Repeat(" ", gap) + right
+}
+
+// selected is the row under the cursor: a block in its first cell and the rest of
+// it bold. A filled row can only carry dark ink, and on the light accents two of
+// the themes use that ink read as plain black.
+func selected(plain string, width int) string {
+	rest := []rune(trunc(plain, width))[1:]
+	return ui.bar.Render(" ") + ui.text.Bold(true).Render(string(rest))
 }
 
 // trunc cuts a string to w columns, ending in an ellipsis when it doesn't fit.

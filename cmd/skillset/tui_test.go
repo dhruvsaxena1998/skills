@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -8,6 +10,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // tuiModel builds a screen over a two-source repo: app -> core -> base in "s",
@@ -574,4 +577,79 @@ func TestTUIDetailLoadsPatchesOffTheDraw(t *testing.T) {
 	if m.load() != nil {
 		t.Fatal("a loaded skill must not ask again")
 	}
+}
+
+// TestColumnsAddUpAtEveryWidth: every column is padded to a fixed size, so a width
+// the arithmetic doesn't account for is a ragged right edge on screen.
+func TestColumnsAddUpAtEveryWidth(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	for _, w := range []int{80, 89, 90, 110, 140, 200} {
+		m.width, m.height = w, 30
+		for i, line := range strings.Split(m.columns(12), "\n") {
+			if got := lipgloss.Width(line); got != w-2 {
+				t.Fatalf("at %d columns, body line %d is %d cells, want %d", w, i, got, w-2)
+			}
+		}
+	}
+}
+
+// TestFirstColumnFitsTheLongestSource: the owner's own sources.json has a ten
+// character name carrying a 16/16 tally, and the column was cutting it short.
+func TestFirstColumnFitsTheLongestSource(t *testing.T) {
+	var skills []string
+	for i := range 16 {
+		skills = append(skills, fmt.Sprintf("skill%d", i))
+	}
+	_, repo := setup(t, skills...)
+	list, _ := json.Marshal(skills)
+	write(t, filepath.Join(repo, "sources.json"), fmt.Sprintf(
+		`{"mattpocock": {"repo": "https://example.test/m", "ref": "main", "path": "skills", "skills": %s}}`, list))
+	cfg := &Config{Repo: repo, Targets: []string{"claude"}, Enabled: skills}
+	save(t, cfg)
+	m, err := newModel(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.width, m.height = 90, 30
+
+	lines, _, _ := m.firstColumn(20)
+
+	joined := plain(strings.Join(lines, "\n"))
+	if !strings.Contains(joined, "mattpocock") || strings.Contains(joined, "…") {
+		t.Fatalf("the sources column cuts its longest name short:\n%s", joined)
+	}
+	if !strings.Contains(joined, "16/16") {
+		t.Fatalf("the tally should sit beside the name, whole:\n%s", joined)
+	}
+}
+
+// TestReviewPaneSignsEveryLine: the changes screen reads as a diff, so the sign
+// has to say which way each line goes.
+func TestReviewPaneSignsEveryLine(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	m.width, m.height = 100, 30
+	m.review = []string{
+		"link /home/me/.claude/skills/app",
+		"unlink /home/me/.agents/skills/old",
+		"update hooks in /home/me/.claude/settings.json",
+		"skip app: not in the repo",
+	}
+
+	pane := plain(m.reviewPane(10))
+
+	for _, want := range []string{
+		"+ /home/me/.claude/skills/app",
+		"- /home/me/.agents/skills/old",
+		"~ hooks in /home/me/.claude/settings.json",
+		"  skip app: not in the repo",
+		"1 links · 1 unlinks · 1 hook files", // the summary counts the verbs, not the signs
+	} {
+		if !strings.Contains(pane, want) {
+			t.Errorf("the review is missing %q:\n%s", want, pane)
+		}
+	}
+	if strings.Contains(pane, "+ link ") || strings.Contains(pane, "- unlink ") {
+		t.Error("the sign carries the verb, so the verb should be gone")
+	}
+	t.Log("\n" + m.reviewPane(10))
 }
