@@ -234,27 +234,75 @@ func TestTUIMovesBetweenColumns(t *testing.T) {
 	}
 }
 
-// TestTUITabBarGoesSomewhere: a tab that doesn't respond to a key is decoration.
-func TestTUITabBarGoesSomewhere(t *testing.T) {
+// TestTUITabBarSaysWhereYouAre: the bar is an indicator, not navigation. It reads
+// off the cursor, and tab moves nothing.
+func TestTUITabBarSaysWhereYouAre(t *testing.T) {
 	m, _, _ := tuiModel(t)
 	goTo(t, m, "app")
 	if m.tab() != tabSkills {
 		t.Fatal("a skill under the cursor is the skills tab")
 	}
 
+	before, _ := m.at()
 	m.key(tea.KeyMsg{Type: tea.KeyTab})
-	if r, _ := m.at(); r.kind != rowTarget || m.tab() != tabTargets {
-		t.Fatalf("tab landed on %+v, want the first target", r)
+	if after, _ := m.at(); after != before || m.review != nil {
+		t.Fatalf("tab landed on %+v, want nothing moved", after)
 	}
 
-	m.key(tea.KeyMsg{Type: tea.KeyTab})
+	goTo(t, m, "claude") // walking onto a target row is what lights that tab
+	if m.tab() != tabTargets {
+		t.Fatal("a target under the cursor is the targets tab")
+	}
+
+	press(m, "s")
 	if m.review == nil || m.tab() != tabChanges {
-		t.Fatal("tab from the targets should open the changes")
+		t.Fatal("s opens the review, which is the changes tab")
 	}
+	press(m, "q") // and esc or q is still the way out of it
+	if m.review != nil {
+		t.Fatal("q should leave the review")
+	}
+}
 
-	m.key(tea.KeyMsg{Type: tea.KeyTab})
-	if r, _ := m.at(); m.review != nil || r.kind != rowSkill {
-		t.Fatalf("tab should come back round to the skills, got %+v", r)
+// TestTUICountsForeignEntriesItCannotShow covers #13: on a short screen the first
+// column scrolls NOT OURS off, and a section you can't see must still say it exists.
+func TestTUICountsForeignEntriesItCannotShow(t *testing.T) {
+	m, home, _ := tuiModel(t)
+	for _, name := range []string{"synced", "trash"} {
+		write(t, filepath.Join(home, ".claude", "skills", name, "SKILL.md"), "# not ours")
+	}
+	m.build()
+	m.width, m.height = 110, 16
+
+	view := m.View()
+
+	if strings.Contains(view, "synced") || strings.Contains(view, "trash") {
+		t.Fatal("this height is meant to be too short to list them; the test proves nothing")
+	}
+	if !strings.Contains(view, "NOT OURS · 2 more") {
+		t.Errorf("the count of foreign entries is missing from:\n%s", view)
+	}
+}
+
+// TestTUIFilterTogglesWithSpace covers #12: space is the way from a filter to a
+// toggle, and the filter survives it.
+func TestTUIFilterTogglesWithSpace(t *testing.T) {
+	m, _, _ := tuiModel(t)
+
+	press(m, "/")
+	for _, r := range "cor" {
+		press(m, string(r))
+	}
+	press(m, " ")
+
+	if m.filter != "cor" {
+		t.Fatalf("filter = %q, want the space to toggle rather than land in it", m.filter)
+	}
+	if !slices.Contains(m.cfg.Enabled, "core") {
+		t.Fatalf("enabled = %v, want the match under the cursor turned on", m.cfg.Enabled)
+	}
+	if !m.typing {
+		t.Fatal("a toggle shouldn't drop you out of the filter")
 	}
 }
 
