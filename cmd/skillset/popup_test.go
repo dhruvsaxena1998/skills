@@ -29,7 +29,7 @@ func TestPopupReadsASkillAndEscGoesBack(t *testing.T) {
 
 	m.key(tea.KeyMsg{Type: tea.KeyEnter})
 
-	if m.pop != "skill" || !strings.Contains(plain(strings.Join(m.popBody, "\n")), "the engine room") {
+	if m.pop != "skill:core" || !strings.Contains(plain(strings.Join(m.popBody, "\n")), "the engine room") {
 		t.Fatalf("the overlay is %q with %v, want the rendered file", m.pop, m.popBody)
 	}
 	if !strings.Contains(plain(m.View()), "the engine room") {
@@ -117,9 +117,28 @@ func TestKeysOverlayListsEveryBoundKey(t *testing.T) {
 		t.Fatal("a search that matches nothing should say so")
 	}
 
+	// esc undoes one thing per press: the search first, the popup only once there
+	// is no search left to take back
 	esc(m)
-	if m.pop != "" || m.query != "" {
-		t.Fatalf("esc left pop=%q query=%q", m.pop, m.query)
+	if m.pop != "keys" || m.query != "" {
+		t.Fatalf("the first esc left pop=%q query=%q, want the search cleared and the popup up", m.pop, m.query)
+	}
+	esc(m)
+	if m.pop != "" {
+		t.Fatalf("the second esc left pop=%q, want the popup closed", m.pop)
+	}
+}
+
+// TestKeysOverlayTakesQAsALetter: q quits the list, but inside the search box it
+// is a character like any other.
+func TestKeysOverlayTakesQAsALetter(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	press(m, "?")
+
+	press(m, "q")
+
+	if m.pop != "keys" || m.query != "q" {
+		t.Fatalf("q left pop=%q query=%q, want it typed into the search", m.pop, m.query)
 	}
 }
 
@@ -153,6 +172,82 @@ func TestKeysOverlayPicksAThemeAndWritesIt(t *testing.T) {
 	}
 }
 
+// TestDensityPickerWritesItAtOnce: the spacing is this machine's look, so like a
+// theme it lands and is written on the keypress rather than riding the save flow.
+func TestDensityPickerWritesItAtOnce(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	if m.comfortable() {
+		t.Fatalf("density = %q, want an empty config to read as compact", m.cfg.Density)
+	}
+	press(m, "?")
+
+	press(m, "0")
+
+	if m.cfg.Density != "comfortable" || !m.comfortable() {
+		t.Fatalf("density = %q, want the key to turn the air on", m.cfg.Density)
+	}
+	if m.dirty {
+		t.Fatal("the spacing is not an unsaved selection change")
+	}
+	cfg, err := loadConfig()
+	if err != nil || cfg.Density != "comfortable" {
+		t.Fatalf("the config on disk says %q (%v), want it written as it was pressed", cfg.Density, err)
+	}
+	if !strings.Contains(plain(strings.Join(m.popBody, "\n")), "DENSITY") {
+		t.Fatal("the overlay should show the picker it just changed")
+	}
+
+	press(m, "0")
+	if m.cfg.Density != "compact" || m.comfortable() {
+		t.Fatalf("density = %q, want the same key to put it back", m.cfg.Density)
+	}
+	if cfg, err := loadConfig(); err != nil || cfg.Density != "compact" {
+		t.Fatalf("the config on disk says %q (%v), want the way back written too", cfg.Density, err)
+	}
+}
+
+// TestPopupTakesTheWholeWidthAndRewraps: the owner's SKILL.md sat in 80 columns
+// on a wide screen, and stayed at that width when the terminal changed.
+func TestPopupTakesTheWholeWidthAndRewraps(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "skills", "core", "SKILL.md"),
+		"# core\n\n"+strings.Repeat("the engine room runs everything else. ", 20)+"\n")
+	m.width, m.height = 200, 50
+	goTo(t, m, "core")
+	m.key(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if w := m.popWidth(); w < 190 {
+		t.Fatalf("popWidth = %d on a 200-column screen, want the box to use it", w)
+	}
+	wide := widest(m.popBody)
+	if wide <= 80 {
+		t.Fatalf("the widest line is %d columns, want the prose past the old 80", wide)
+	}
+
+	m.popTop = 3
+	m.width = 60
+	m.resizePop()
+
+	if narrow := widest(m.popBody); narrow >= wide {
+		t.Fatalf("the lines are %d columns after shrinking to 60, were %d", narrow, wide)
+	}
+	if m.popTop != 3 {
+		t.Fatalf("popTop = %d, want a resize to leave your place alone", m.popTop)
+	}
+	if !strings.Contains(plain(strings.Join(m.popBody, "\n")), "engine room") {
+		t.Fatal("the re-wrapped body should still be the same file")
+	}
+}
+
+// widest is the longest line once the colours are off them.
+func widest(body []string) int {
+	n := 0
+	for _, line := range body {
+		n = max(n, len([]rune(strings.TrimRight(plain(line), " "))))
+	}
+	return n
+}
+
 // TestEveryThemeFillsEveryField: a half-filled palette renders black on black.
 func TestEveryThemeFillsEveryField(t *testing.T) {
 	defer useTheme(defaultTheme)
@@ -160,7 +255,7 @@ func TestEveryThemeFillsEveryField(t *testing.T) {
 		useTheme(name)
 		for field, c := range map[string]string{"Accent": string(th.Accent), "AccentAlt": string(th.AccentAlt),
 			"OK": string(th.OK), "Warn": string(th.Warn), "Muted": string(th.Muted),
-			"Text": string(th.Text), "Inverse": string(th.Inverse)} {
+			"Text": string(th.Text), "Inverse": string(th.Inverse), "BarInk": string(th.BarInk)} {
 			if len(c) != 7 || c[0] != '#' {
 				t.Errorf("theme %q has %s = %q, want a hex colour", name, field, c)
 			}

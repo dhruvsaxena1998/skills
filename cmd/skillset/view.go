@@ -318,9 +318,9 @@ func (m *model) popupPane(h int) string {
 		Render(ui.box.Render(pad(windowed(m.popBody, &m.popTop, -1, h-2), w-4, h-2)))
 }
 
-// popWidth keeps the box off both edges, and off the far side of a wide screen,
-// where a full-width line of prose is no longer readable.
-func (m *model) popWidth() int { return max(34, min(m.width-6, 96)) }
+// popWidth keeps the box off both edges and takes everything between them; it is
+// the prose inside that stops widening, not the box.
+func (m *model) popWidth() int { return max(34, m.width-6) }
 
 // reviewPane is the changes tab: every link, unlink and hook file a save would write.
 func (m *model) reviewPane(h int) string {

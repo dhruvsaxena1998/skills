@@ -17,7 +17,14 @@ type Config struct {
 	// Theme picks the screen's look by name; empty, or a name that no longer
 	// exists, falls back to the default.
 	Theme string `json:"theme,omitempty"`
+	// Density is how much air the list gets: "comfortable" puts a blank line
+	// between rows, anything else is the compact list.
+	Density string `json:"density,omitempty"`
 }
+
+// comfortable is the spaced-out list. Empty reads as compact, so a config written
+// before this setting existed keeps the look it had.
+func (m *model) comfortable() bool { return m.cfg.Density == "comfortable" }
 
 var errNotSetUp = errors.New("not set up on this machine yet: run `skillset init` inside your skills clone, or `skillset init <path>`")
 
