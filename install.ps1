@@ -19,10 +19,14 @@ $target = Join-Path $dir 'skillset.exe'
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$target.new" -UseBasicParsing
 Move-Item -Path "$target.new" -Destination $target -Force
 
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+# Read the PATH raw: [Environment]::GetEnvironmentVariable would hand back a copy with
+# every %VAR% already replaced, and writing that back freezes the user's own variables.
+$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+$userPath = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames')
 if (($userPath -split ';') -notcontains $dir) {
   $userPath = if ([string]::IsNullOrEmpty($userPath)) { $dir } else { "$userPath;$dir" }
-  [Environment]::SetEnvironmentVariable('Path', $userPath, 'User')
+  $key.SetValue('Path', $userPath, 'ExpandString')
   Write-Host "added $dir to your PATH; open a new terminal to pick it up"
 }
+$key.Close()
 Write-Host "skillset $($release.tag_name) installed in $target"
