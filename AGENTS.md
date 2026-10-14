@@ -2,10 +2,18 @@
 
 This repo holds agent skills taken from several upstreams, the local edits made on top of
 them, and `skillset`, the Go binary that links them into agent folders. `README.md`
-explains what the commands do. This file is what to do when you change the repo.
+explains what the commands do, and so does `skillset help` where there is no README. This
+file is what to do when you change the repo.
+
+Starting from an empty folder instead: sources.json below has the two files a repo needs
+and the four commands that make one. Copy this file and its one-line `CLAUDE.md` in with
+them, and every recipe here applies to that repo as written.
 
 Work on a branch. Run `skillset` commands from the clone `skillset init` recorded: `sync`
-reads the repo path out of `~/.config/skillset/config.json`, not the working directory.
+reads the repo path out of `~/.config/skillset/config.json`, not the working directory. In a
+clone that has never synced, `git fetch origin 'refs/heads/vendor/*:refs/heads/vendor/*'`
+before the first `sync`, or it rebuilds the vendor branch as an orphan and every patched
+file conflicts.
 
 ## Add a skill from a source we already have
 
@@ -18,27 +26,83 @@ Removing a name from the list deletes the skill on the next sync.
 
 ## Add a source
 
-Add an entry to `sources.json`:
+Add an entry to `sources.json`, with the fields below, then `skillset sync <name>`. The
+first run creates the orphan `vendor/<name>` branch.
+
+## sources.json
+
+The file is one object, a source name to its source. The name is what
+`skillset sync <name>` takes, the branch it keeps (`vendor/<name>`), the license it writes
+(`licenses/<name>-LICENSE`), and the group the screen lists those skills under. A skill in
+`skills/` that no source claims is `unlisted`.
+
+| Field    | Type     | Required | What it is                                                                   |
+| -------- | -------- | -------- | ---------------------------------------------------------------------------- |
+| `repo`   | string   | yes      | What `git clone` is handed: any URL git can clone, or a local path           |
+| `ref`    | string   | yes      | The branch or tag to clone. No default, and an empty one fails the clone     |
+| `path`   | string   | no       | The folder under the clone to search. Omitted means the clone root           |
+| `skills` | string[] | yes      | The folder names to take, found anywhere under `path`                        |
+| `files`  | string[] | no       | Globs of other files to copy, relative to the clone root, not to `path`      |
+| `deps`   | object   | no       | A skill name to `{ "requires": [], "optional": [] }`, see Dependencies       |
+
+Paths in `path` and `files` use forward slashes on every OS.
+
+Every field, in ponytail's own entry with its skill list cut to two:
 
 ```json
-"name": {
-  "repo": "https://github.com/owner/repo",
-  "ref": "main",
-  "path": "path/to/skills",
-  "skills": ["skill-a", "skill-b"],
-  "files": ["hooks/some-hook-*.js"],
-  "deps": {
-    "skill-a": {},
-    "skill-b": { "requires": ["skill-a"], "optional": ["unslop"] }
+{
+  "ponytail": {
+    "repo": "https://github.com/dietrichgebert/ponytail",
+    "ref": "main",
+    "path": "skills",
+    "skills": ["ponytail", "ponytail-debt"],
+    "files": [
+      "hooks/ponytail-*.js",
+      "hooks/ponytail-statusline.sh",
+      "hooks/ponytail-statusline.ps1"
+    ],
+    "deps": {
+      "ponytail": {},
+      "ponytail-debt": { "requires": ["ponytail"] }
+    }
   }
 }
 ```
 
-Skills are found by folder name anywhere under `path`, so upstream regrouping its folders
-doesn't break the sync. `files` is optional: globs of non-skill files copied to the same
-relative path, e.g. ponytail's hook scripts. Sync fails if a glob matches nothing.
+What sync does with them, and where each one bites:
 
-Then `skillset sync name`. The first run creates the orphan `vendor/name` branch.
+- A skill is found by folder name anywhere under `path`, so upstream regrouping its folders
+  doesn't break the sync. Exactly one folder must match and it must hold a `SKILL.md`; none
+  or two both fail the sync by name.
+- `files` copies each match to the same relative path here, which is how a skill's hook
+  scripts arrive. A glob matching nothing fails the sync, so a renamed upstream file is
+  caught rather than silently dropped.
+- Those globs are Go's `filepath.Glob`: `*` stops at a `/` and `**` is not recursive.
+  `hooks/**/*.js` means exactly one folder deep and silently skips `hooks/x.js`. Write one
+  entry per level.
+- The nearest LICENSE is copied to `licenses/<name>-LICENSE`: `<path>/LICENSE`, then its
+  parent, then the clone root. Nothing to configure, and upstream having none is not an
+  error, so check that the license you owe is there.
+- The vendor branch holds only what sync writes. Everything else about the source — its
+  patches, its hook registrations — lives on the branch you work on.
+
+A repo `skillset` accepts is two things:
+
+```text
+sources.json   required, and `{}` is valid: a repo of nothing but your own skills
+skills/        required, and may be empty
+hooks/         optional, holds hooks.json and the scripts it names
+licenses/      written by sync
+```
+
+`init` checks those first two and nothing else, so a new repo is:
+
+```sh
+mkdir -p <repo>/skills && cd <repo>
+echo '{}' > sources.json
+git init && git add -A && git commit -m "init"
+skillset init <repo>
+```
 
 ## Add a skill of your own
 

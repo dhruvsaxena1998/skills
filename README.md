@@ -58,6 +58,56 @@ Targets are the agent folders to link into, both on by default:
 | `claude` | `~/.claude/skills` | `~/.claude/settings.json` | Claude Code             |
 | `agents` | `~/.agents/skills` | `~/.codex/hooks.json`     | Codex, pi, OpenCode     |
 
+## Your own skills repo
+
+`skillset` is not tied to this repo. `init` takes any folder that has a `sources.json` and
+a `skills/` folder; that is the whole test. The vendor branches, `hooks/hooks.json` and
+`licenses/` are made when they are first needed.
+
+Fork this one to start from these skills and these patches:
+
+```sh
+git clone https://github.com/<you>/skills ~/skills
+cd ~/skills
+git fetch origin 'refs/heads/vendor/*:refs/heads/vendor/*'   # once per clone, see below
+skillset init ~/skills
+skillset apply
+```
+
+Start empty to take only the machinery:
+
+```sh
+mkdir -p ~/skills/skills && cd ~/skills
+echo '{}' > sources.json
+git init && git add -A && git commit -m "init"
+skillset init ~/skills
+```
+
+An empty `sources.json` is valid. With no source, every skill in `skills/` is `unlisted` on
+the selection screen, which is where a skill of your own lives in any case.
+
+From there [AGENTS.md](AGENTS.md) is the playbook and needs no changes: it is written about
+a skills repo, not about this one. Adding a source, writing a skill of your own, patching an
+upstream skill and registering a hook all work the same in a fork or an empty repo. Keep
+`AGENTS.md` and its one-line `CLAUDE.md` (`@AGENTS.md`) so your agent reads it too.
+
+To keep taking my changes after a fork:
+
+```sh
+git remote add upstream https://github.com/dhruvsaxena1998/skills
+git pull upstream main
+```
+
+My patches arrive as ordinary commits and meet yours in a normal merge, the same way an
+upstream sync does.
+
+Two things point at this repo whatever repo you link from:
+
+- `skillset init` with no path offers to clone *this* repo when it finds no clone. Pass your
+  path and it never asks.
+- `skillset update` installs *this* repo's releases. If you fork the Go code, build it with
+  `go build ./cmd/skillset` and don't run `update`: it would replace your build with mine.
+
 ## The selection screen
 
 Running `skillset` with no arguments opens it. The left column lists the sources, the
@@ -122,6 +172,14 @@ This clones upstream, replaces the selected skills on `vendor/mattpocock`, commi
 keeps my edits wherever upstream didn't touch the same lines; anything else shows up as a
 normal merge conflict. Sync refuses to start with uncommitted changes, and warns when a
 skill links to a sibling skill that its `deps` entry doesn't list.
+
+`git clone` brings only `main`, so a fresh clone has no local `vendor/*` branches. Sync
+rebuilds a missing one as a new orphan with no history in common with the merge, and every
+file I have patched then conflicts add/add. Fetch them once per clone:
+
+```sh
+git fetch origin 'refs/heads/vendor/*:refs/heads/vendor/*'
+```
 
 See what I've changed relative to upstream:
 
