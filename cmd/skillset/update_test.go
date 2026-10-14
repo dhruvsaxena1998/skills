@@ -105,6 +105,57 @@ func TestUpdateKeepsTheBinaryWhenTheDownloadFails(t *testing.T) {
 	}
 }
 
+// downloadServer serves body at its root, chunked when sendLength is false so the client
+// sees no Content-Length.
+func downloadServer(t *testing.T, body string, sendLength bool) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Go only works out a Content-Length for itself on bodies small enough to buffer.
+		if sendLength {
+			w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+		}
+		fmt.Fprint(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func TestReplaceBinaryShowsHowMuchOfTheDownloadHasArrived(t *testing.T) {
+	url := downloadServer(t, strings.Repeat("x", 3<<20), true)
+	exe := installed(t, "old binary")
+	progress := &bytes.Buffer{}
+
+	if err := replaceBinary(exe, url, progress); err != nil {
+		t.Fatal(err)
+	}
+
+	got := progress.String()
+	if !strings.HasPrefix(got, "\r") || !strings.HasSuffix(got, "\n") {
+		t.Errorf("progress %q does not overwrite one line and then close it", got)
+	}
+	if !strings.Contains(got, "100%") || !strings.Contains(got, "3.0 MB") {
+		t.Errorf("progress %q does not reach 100%% of 3.0 MB", got)
+	}
+}
+
+func TestReplaceBinaryCountsBytesWhenTheServerSendsNoLength(t *testing.T) {
+	url := downloadServer(t, strings.Repeat("x", 3<<20), false)
+	exe := installed(t, "old binary")
+	progress := &bytes.Buffer{}
+
+	if err := replaceBinary(exe, url, progress); err != nil {
+		t.Fatal(err)
+	}
+
+	got := progress.String()
+	if !strings.Contains(got, "3.0 MB") {
+		t.Errorf("progress %q does not count the bytes that arrived", got)
+	}
+	if strings.Contains(got, "%") {
+		t.Errorf("progress %q claims a percentage with no total to take it of", got)
+	}
+}
+
 func TestUpdateReportsAnUnreachableReleaseAPI(t *testing.T) {
 	api := releaseServer(t, thisPlatform(), "new binary", http.StatusOK)
 	exe := installed(t, "old binary")

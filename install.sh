@@ -16,8 +16,11 @@ esac
 
 dir="$HOME/.local/bin"
 mkdir -p "$dir"
+echo "downloading skillset_darwin_$arch from github.com..."
+# A bar redrawing itself is noise in a log, so only ask for one on a terminal.
+if [ -t 2 ]; then progress=--progress-bar; else progress=--silent; fi
 # Download beside the target first, so a cut-off download leaves the old binary in place.
-curl -fsSL -o "$dir/skillset.new" \
+curl -fL "$progress" --show-error -o "$dir/skillset.new" \
   "https://github.com/dhruvsaxena1998/skills/releases/latest/download/skillset_darwin_$arch"
 chmod +x "$dir/skillset.new"
 mv "$dir/skillset.new" "$dir/skillset"
