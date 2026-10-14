@@ -26,11 +26,18 @@ func apply(cfg *Config, out io.Writer) error {
 	}
 	for _, t := range targets {
 		dir := filepath.Join(home, t.dir)
-		if !slices.Contains(cfg.Targets, t.name) {
-			prune(dir, skillsDir, nil, out)
+		on := slices.Contains(cfg.Targets, t.name)
+		enabled := cfg.Enabled
+		if !on {
+			enabled = nil // a target that is off keeps neither links nor hooks of ours
+		}
+		prune(dir, skillsDir, enabled, out)
+		if err := syncHooks(filepath.Join(home, t.hooks), cfg.Repo, enabled, out); err != nil {
+			return err
+		}
+		if !on {
 			continue
 		}
-		prune(dir, skillsDir, cfg.Enabled, out)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
