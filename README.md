@@ -85,6 +85,7 @@ skillset disable <skill> turn it off, with the skills that require it
 skillset apply           link enabled skills, unlink the rest
 skillset sync <source>   pull a source's skills from upstream into this repo
 skillset update          replace this binary with the latest release
+skillset version         print the version of this binary (--version, -v)
 ```
 
 `enable` and `disable` change the selection without the screen, which is how agents and

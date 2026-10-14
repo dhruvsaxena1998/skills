@@ -8,7 +8,8 @@ builds:
     env: [CGO_ENABLED=0]
     goos: [darwin, windows]
     goarch: [amd64, arm64]
-    ldflags: [-s -w]
+    # The tag keeps its v, so this build and a `go install ...@v0.1.1` one say the same thing.
+    ldflags: [-s -w, "-X main.version={{ .Tag }}"]
 
 archives:
   # Plain binaries, not tarballs: the installers and `skillset update` then need
