@@ -14,6 +14,10 @@ if (-not $asset) { throw "release $($release.tag_name) has no build for windows_
 $dir = Join-Path $env:USERPROFILE '.local\bin'
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $target = Join-Path $dir 'skillset.exe'
+Write-Host ("downloading {0} ({1:N1} MB) from github.com..." -f $asset.name, ($asset.size / 1MB))
+# Its own progress bar makes Invoke-WebRequest crawl on Windows PowerShell, so the line
+# above is the progress and the bar stays off.
+$ProgressPreference = 'SilentlyContinue'
 # Download beside the target first, so a cut-off download leaves the old binary in place.
 # shortcut: this still fails if skillset is running; close it and re-run, or use `skillset update`.
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$target.new" -UseBasicParsing
