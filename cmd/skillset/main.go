@@ -14,6 +14,8 @@ const usage = `skillset links this repo's skills into your agent folders.
   skillset enable <skill>  turn a skill on here, with what it requires
   skillset disable <skill> turn it off, with the skills that require it
   skillset apply           link enabled skills, unlink the rest
+  skillset sync <source>   pull a source's skills from upstream into this repo
+  skillset update          replace this binary with the latest release
 `
 
 func main() {

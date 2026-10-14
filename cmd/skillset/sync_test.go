@@ -55,15 +55,6 @@ func gitInit(t *testing.T, dir string) {
 	}
 }
 
-func read(t *testing.T, path string) string {
-	t.Helper()
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(body)
-}
-
 // the structs sync reads with have to match the sources.json this repo actually ships
 func TestThisRepoSourcesAreLoadable(t *testing.T) {
 	sources, err := loadSources(filepath.Join("..", ".."))
