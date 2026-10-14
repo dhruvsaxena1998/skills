@@ -10,15 +10,17 @@ import (
 	"strings"
 )
 
-// target is an agent's skills folder, relative to the home folder.
+// target is an agent's skills folder and hook config, relative to the home folder.
 type target struct {
-	name string
-	dir  string
+	name  string
+	dir   string
+	hooks string
 }
 
 var targets = []target{
-	{"claude", filepath.Join(".claude", "skills")}, // the only folder Claude Code reads
-	{"agents", filepath.Join(".agents", "skills")}, // Codex, pi and OpenCode read this one
+	// .claude/skills is the only folder Claude Code reads; .agents/skills is read by Codex, pi and OpenCode.
+	{"claude", filepath.Join(".claude", "skills"), filepath.Join(".claude", "settings.json")},
+	{"agents", filepath.Join(".agents", "skills"), filepath.Join(".codex", "hooks.json")},
 }
 
 // legacyDirs held links from scripts/link.sh and are emptied of our links on every apply.

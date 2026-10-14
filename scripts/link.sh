@@ -44,7 +44,7 @@ for spec in "${hook_files[@]}"; do
   updated=$(jq --arg root "$hook_root/hooks/" --argjson ours "$ours" --arg unlink "$unlink" '
     def mine: any(.hooks[]?; .command | contains($root));
     .hooks = (reduce (((.hooks // {}) | keys) + ($ours | keys) | unique)[] as $e (.hooks // {};
-      .[$e] = ([(.[$e] // [])[] | select(mine | not)] + (if $unlink == "" then ($ours[$e] // []) else [] end))
+      .[$e] = ([(.[$e] // [])[] | select(mine | not)] + (if $unlink == "" then [($ours[$e] // [])[] | del(.skill)] else [] end))
       | if .[$e] == [] then del(.[$e]) else . end))
   ' "$file")
   if [[ $updated != "$(jq . "$file")" ]]; then
