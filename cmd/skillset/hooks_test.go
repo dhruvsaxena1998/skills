@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -185,6 +186,12 @@ func TestApplyWritesNoHookConfigWhenThereAreNoHooks(t *testing.T) {
 }
 
 func TestHookBackupKeepsThePermissionsOfTheOriginal(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows has no permission bits to keep: Go reports 0666 for anything that
+		// isn't read-only, so there is nothing here to assert. Access is an ACL
+		// question there, which os.Chmod can't reach either way.
+		t.Skip("no Unix permission bits on Windows")
+	}
 	home, repo := hooksRepo(t)
 	claude := filepath.Join(home, ".claude", "settings.json")
 	write(t, claude, foreign)
