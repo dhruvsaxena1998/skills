@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const help = "space toggle · ←→ columns · / filter · tab move · s review · p pull · q quit"
+const help = "space toggle · ←→ columns · / filter · s review · p pull · q quit"
 
 type tabID int
 
@@ -94,8 +94,18 @@ func (m *model) columns(h int) string {
 
 	c1, sel1 := m.sourceColumn(sourceW)
 	c2, sel2 := m.skillColumn(skillW, inline)
+	first := windowed(c1, &m.left, sel1, h)
+	// NOT OURS is the last section, so a short screen drops it first, and the whole
+	// point of it is that you weren't looking: its count takes the last line instead
+	// shortcut: targets cut along with it aren't counted, they are a fixed list the
+	// cursor can always walk to; count them too if that stops being true
+	if cut := len(c1) - m.left - h; cut > 0 {
+		if n := min(m.notOurs(), cut+1); n > 0 {
+			first[len(first)-1] = ui.dim.Render(trunc(fmt.Sprintf("NOT OURS · %d more", n), sourceW))
+		}
+	}
 	panes := []string{
-		pad(windowed(c1, &m.left, sel1, h), sourceW, h),
+		pad(first, sourceW, h),
 		pad(windowed(c2, &m.mid, sel2, h), skillW, h),
 	}
 	if showDetail {
@@ -165,6 +175,17 @@ func (m *model) sourceColumn(width int) ([]string, int) {
 	return out, sel
 }
 
+// notOurs is how many entries in the agent folders this repo didn't create.
+func (m *model) notOurs() int {
+	n := 0
+	for _, r := range m.rows {
+		if r.kind == rowOther {
+			n++
+		}
+	}
+	return n
+}
+
 // skillColumn is the middle column: the skills of the current source, or every
 // match while a filter is on, with the description inline when there is room.
 func (m *model) skillColumn(width int, inline bool) ([]string, int) {
@@ -208,7 +229,11 @@ func (m *model) skillColumn(width int, inline bool) ([]string, int) {
 		out = append(out, styled)
 	}
 	if len(out) == 1 {
-		out = append(out, "", ui.dim.Render(" no skills here"))
+		empty := " no skills here"
+		if m.filter != "" {
+			empty = " nothing matches " + trunc(m.filter, width-18)
+		}
+		out = append(out, "", ui.dim.Render(empty))
 	}
 	return out, sel
 }
@@ -266,8 +291,11 @@ func (m *model) rail() []string {
 	}
 
 	keys := help
-	if m.review != nil {
+	switch {
+	case m.review != nil:
 		keys = "enter applies this · esc goes back"
+	case m.typing:
+		keys = "space toggles · ↑↓ move · enter keeps the filter · esc clears it"
 	}
 	left := ""
 	if m.typing || m.filter != "" {

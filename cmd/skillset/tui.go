@@ -332,6 +332,12 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 			if msg.String() == "esc" {
 				m.filter = ""
 			}
+		case " ":
+			m.toggle() // skill names are kebab-case, so a space in a filter only empties the list
+		case "up":
+			m.move(-1) // the arrows, not j and k: those are still text
+		case "down":
+			m.move(1)
 		case "backspace":
 			if m.filter != "" {
 				m.filter = m.filter[:len(m.filter)-1]
@@ -350,8 +356,6 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 			return m.save()
 		case "esc", "q":
 			m.review = nil
-		case "tab":
-			m.nextTab() // the tab bar still works from behind the review
 		}
 		return nil
 	}
@@ -377,8 +381,6 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		if r, ok := m.at(); ok && r.kind != rowSkill {
 			m.jump(rowSkill, m.source)
 		}
-	case "tab":
-		m.nextTab()
 	case " ", "x":
 		m.toggle()
 	case "/":
@@ -390,22 +392,6 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		m.openReview()
 	}
 	return nil
-}
-
-// nextTab walks the tab bar: the skills, the targets, then the changes they add up
-// to. The bar is only worth drawing if it goes somewhere, so every tab is a place.
-func (m *model) nextTab() {
-	switch m.tab() {
-	case tabSkills:
-		if !m.jump(rowTarget, "") {
-			m.openReview()
-		}
-	case tabTargets:
-		m.openReview()
-	default:
-		m.review = nil
-		m.jump(rowSkill, m.source)
-	}
 }
 
 func (m *model) openReview() {
