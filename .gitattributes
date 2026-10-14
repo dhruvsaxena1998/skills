@@ -1,0 +1,4 @@
+# LF everywhere so bash scripts run on Windows and upstream syncs merge cleanly
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary

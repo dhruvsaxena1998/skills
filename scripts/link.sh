@@ -7,6 +7,11 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 targets=("$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.pi/agent/skills")
 unlink=$([[ ${1:-} == --unlink ]] && echo 1 || true)
 
+# Git Bash on Windows: make `ln -s` create real symlinks (needs Developer Mode) instead of silent copies,
+# and give hooks a C:/... path, since Windows node can't open /c/... paths.
+export MSYS=winsymlinks:nativestrict
+hook_root=$(command -v cygpath >/dev/null && cygpath -m "$root" || echo "$root")
+
 for t in "${targets[@]}"; do
   mkdir -p "$t"
   for l in "$t"/*; do
@@ -31,12 +36,12 @@ done
 # Register hooks/hooks.json in each agent's hook config. Ours are appended after existing
 # entries (Codex keys hook trust by position) and found again by their path into this repo.
 hook_files=("$HOME/.claude/settings.json:.hooks" "$HOME/.codex/hooks.json:.hooks")
-ours=$(sed "s|{{ROOT}}|$root|g" "$root/hooks/hooks.json")
+ours=$(sed "s|{{ROOT}}|$hook_root|g" "$root/hooks/hooks.json")
 for spec in "${hook_files[@]}"; do
   file=${spec%%:*}
   [[ -f $file ]] || { echo "skip hooks: $file not found" >&2; continue; }
   # shellcheck disable=SC2016
-  updated=$(jq --arg root "$root/hooks/" --argjson ours "$ours" --arg unlink "$unlink" '
+  updated=$(jq --arg root "$hook_root/hooks/" --argjson ours "$ours" --arg unlink "$unlink" '
     def mine: any(.hooks[]?; .command | contains($root));
     .hooks = (reduce (((.hooks // {}) | keys) + ($ours | keys) | unique)[] as $e (.hooks // {};
       .[$e] = ([(.[$e] // [])[] | select(mine | not)] + (if $unlink == "" then ($ours[$e] // []) else [] end))
