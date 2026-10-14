@@ -14,8 +14,9 @@ import (
 
 type rowKind int
 
-// The order is the order of the first column: sources, then targets, then the
-// entries we don't own. Column one prints a heading wherever the kind changes.
+// The order is the order of the steps: the sources and their skills, then the
+// targets and the entries we don't own. Column one prints a heading wherever the
+// kind changes.
 const (
 	rowSource rowKind = iota
 	rowSkill
@@ -23,12 +24,21 @@ const (
 	rowOther // an entry in an agent folder that this repo didn't create
 )
 
+// stepOf is the screen a row belongs to. Targets and what else lives in their
+// folders are the second step; everything else is the first.
+func stepOf(k rowKind) tabID {
+	if k == rowTarget || k == rowOther {
+		return tabTargets
+	}
+	return tabSkills
+}
+
 var headings = map[rowKind]string{rowSource: "SOURCES", rowTarget: "TARGETS", rowOther: "NOT OURS"}
 
 type row struct {
 	kind rowKind
 	name string
-	src  string
+	src  string // a skill's source, or the folder a target or a foreign entry is
 	note string
 }
 
@@ -38,8 +48,9 @@ type model struct {
 	sources map[string]source
 	home    string
 
+	step   tabID  // the step on screen: the skills or the targets
 	rows   []row  // everything, unfiltered
-	shown  []int  // indexes into rows that pass the filter
+	shown  []int  // indexes into rows that are on this step and pass the filter
 	cursor int    // index into shown
 	source string // the source whose skills the middle column is showing
 
@@ -140,7 +151,8 @@ func (m *model) build() {
 	}
 
 	for _, t := range targets {
-		m.rows = append(m.rows, row{kind: rowTarget, name: t.name, note: filepath.Join("~", t.dir)})
+		m.rows = append(m.rows, row{kind: rowTarget, name: t.name,
+			src: filepath.Join(m.home, t.dir), note: filepath.Join("~", t.dir)})
 	}
 	m.rows = append(m.rows, m.unmanaged()...)
 
@@ -194,7 +206,8 @@ func (m *model) unmanaged() []row {
 			if dest != "" {
 				where = "-> " + dest
 			}
-			out = append(out, row{kind: rowOther, name: filepath.Join("~", t.dir, e.Name()), note: where})
+			out = append(out, row{kind: rowOther, name: filepath.Join("~", t.dir, e.Name()),
+				src: filepath.Join(dir, e.Name()), note: where})
 		}
 	}
 	return out
@@ -204,6 +217,9 @@ func (m *model) refilter() {
 	m.shown = nil
 	f := strings.ToLower(m.filter)
 	for i, r := range m.rows {
+		if stepOf(r.kind) != m.step {
+			continue // another step's rows are not on this screen to walk onto
+		}
 		switch {
 		case f == "":
 		case r.kind == rowSource:
@@ -227,8 +243,8 @@ func (m *model) at() (row, bool) {
 	return m.rows[m.shown[m.cursor]], true
 }
 
-// mark remembers which source the skills column is showing, so stepping onto a
-// target or a foreign entry doesn't empty it.
+// mark remembers which source the skills column is showing, so a step away and
+// back doesn't empty it.
 func (m *model) mark() {
 	switch r, ok := m.at(); {
 	case !ok:
@@ -282,6 +298,60 @@ func (m *model) jump(kind rowKind, name string) bool {
 	return false
 }
 
+// setStep moves to a step of the flow. The changes step is the review, which is
+// built fresh and sits over the step you opened it from.
+func (m *model) setStep(s tabID) {
+	if s == tabChanges {
+		m.openReview()
+		return
+	}
+	if s == m.step {
+		return
+	}
+	m.step, m.cursor = s, 0
+	m.refilter()
+	if s == tabSkills {
+		m.jump(rowSource, m.source) // back on the source you were reading
+	}
+}
+
+// back dismisses the topmost thing there is: the review, then the filter, then
+// the step you are on, and when there is nothing left it quits. Popups and the
+// filter's own keys are handled before this.
+func (m *model) back() tea.Cmd {
+	switch {
+	case m.review != nil:
+		m.review = nil
+	case m.filter != "":
+		m.filter = ""
+		m.refilter()
+	case m.step > tabSkills:
+		m.setStep(m.step - 1)
+	case m.dirty && !m.asked:
+		m.asked = true
+		// the rail, not the top line: at 80 columns the top line would cut it
+		m.cascade = "unsaved changes — s to review them, q again to discard"
+	default:
+		return tea.Quit
+	}
+	return nil
+}
+
+// inside is what an agent folder or a foreign entry actually holds, so the middle
+// column on the targets step shows that rather than the last source's skills.
+// shortcut: read per draw, not cached; cache it like desc if a huge folder drags.
+func inside(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil // a file or a dangling link has nothing to list
+	}
+	var out []string
+	for _, e := range entries {
+		out = append(out, e.Name())
+	}
+	return out
+}
+
 func (m *model) Init() tea.Cmd { return gitPosition(m.cfg.Repo) }
 
 type gitMsg string
@@ -331,16 +401,17 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit // before the filter and review screens, which swallow keys
 	}
 	if m.pop != "" {
+		if msg.String() == "q" && m.pop != "keys" {
+			msg = tea.KeyMsg{Type: tea.KeyEsc} // only the keys overlay takes typing, so here q dismisses
+		}
 		m.popKey(msg) // an overlay is over everything and swallows the rest
 		return nil
 	}
 	if m.typing {
 		switch msg.String() {
+		// esc peels one level: the focus now, the filter itself on the next press
 		case "enter", "esc":
 			m.typing = false
-			if msg.String() == "esc" {
-				m.filter = ""
-			}
 		case " ":
 			m.toggle() // skill names are kebab-case, so a space in a filter only empties the list
 		case "up":
@@ -364,20 +435,16 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		case "enter":
 			return m.save()
 		case "esc", "q":
-			m.review = nil
+			return m.back()
 		}
-		return nil
+		return nil // the review is the last step: tab has nowhere forward to go
 	}
 
 	switch msg.String() {
-	case "q":
-		if m.dirty && !m.asked {
-			m.asked = true
-			// the rail, not the top line: at 80 columns the top line would cut it
-			m.cascade = "unsaved changes — s to review them, q again to discard"
-			return nil
-		}
-		return tea.Quit
+	case "esc", "q":
+		return m.back()
+	case "tab":
+		m.setStep(min(m.step+1, tabChanges))
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":

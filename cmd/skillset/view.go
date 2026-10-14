@@ -17,16 +17,13 @@ const (
 	tabChanges
 )
 
-// tab is read off where the cursor is rather than stored, so the bar can never
-// disagree with what you are looking at.
+// tab is the step on screen: the review while it is up, and otherwise the step
+// the keys are moving you through.
 func (m *model) tab() tabID {
 	if m.review != nil {
 		return tabChanges
 	}
-	if r, ok := m.at(); ok && (r.kind == rowTarget || r.kind == rowOther) {
-		return tabTargets
-	}
-	return tabSkills
+	return m.step
 }
 
 func (m *model) View() string {
@@ -75,13 +72,19 @@ func (m *model) tabBar() string {
 	if m.dirty {
 		changes += " •" // there is something unsaved behind that tab
 	}
+	// the foreign entries are a step away now, so their count rides on the tab they
+	// are behind: the screen must never read as though the folders hold only ours
+	targets := "targets"
+	if n := m.notOurs(); n > 0 {
+		targets += fmt.Sprintf(" · %d not ours", n)
+	}
 	t := m.tab()
-	return ui.tab("skills", t == tabSkills) + ui.tab("targets", t == tabTargets) +
+	return ui.tab("skills", t == tabSkills) + ui.tab(targets, t == tabTargets) +
 		ui.tab(changes, t == tabChanges)
 }
 
-// columns draws the three of them: the sources and targets, the skills of the one
-// you are on, and everything about the one skill.
+// columns draws the three of them: this step's rows, what the one under the cursor
+// holds, and everything about it.
 func (m *model) columns(h int) string {
 	// below 90 the detail column has nothing but truncation to offer, so it goes and
 	// the descriptions move inline instead; the description is never absent from both
@@ -93,20 +96,13 @@ func (m *model) columns(h int) string {
 		skillW = max(24, m.width-60)
 	}
 
-	c1, sel1 := m.sourceColumn(sourceW)
+	c1, sel1 := m.firstColumn(sourceW)
 	c2, sel2 := m.skillColumn(skillW, inline)
-	first := windowed(c1, &m.left, sel1, h)
-	// NOT OURS is the last section, so a short screen drops it first, and the whole
-	// point of it is that you weren't looking: its count takes the last line instead
-	// shortcut: targets cut along with it aren't counted, they are a fixed list the
-	// cursor can always walk to; count them too if that stops being true
-	if cut := len(c1) - m.left - h; cut > 0 {
-		if n := min(m.notOurs(), cut+1); n > 0 {
-			first[len(first)-1] = ui.dim.Render(trunc(fmt.Sprintf("NOT OURS · %d more", n), sourceW))
-		}
+	if m.step == tabTargets {
+		c2, sel2 = m.insideColumn(skillW), -1
 	}
 	panes := []string{
-		pad(first, sourceW, h),
+		pad(windowed(c1, &m.left, sel1, h), sourceW, h),
 		pad(windowed(c2, &m.mid, sel2, h), skillW, h),
 	}
 	if showDetail {
@@ -124,10 +120,10 @@ func (m *model) columns(h int) string {
 	return lipgloss.NewStyle().MarginLeft(2).Render(lipgloss.JoinHorizontal(lipgloss.Top, joined...))
 }
 
-// sourceColumn is the first column: every source with its own rule and tally, the
-// agent targets, and the entries in those folders that aren't ours. It returns the
-// lines and which of them the cursor is on.
-func (m *model) sourceColumn(width int) ([]string, int) {
+// firstColumn is the first column of the step you are on: every source with its
+// own rule and tally, or the agent targets and the entries in those folders that
+// aren't ours. It returns the lines and which of them the cursor is on.
+func (m *model) firstColumn(width int) ([]string, int) {
 	here := -1
 	if len(m.shown) > 0 {
 		here = m.shown[m.cursor]
@@ -135,11 +131,11 @@ func (m *model) sourceColumn(width int) ([]string, int) {
 	var out []string
 	sel, kind, nth := -1, rowKind(-1), 0
 	for i, r := range m.rows {
-		if r.kind == rowSkill {
+		if r.kind == rowSkill || stepOf(r.kind) != m.step {
 			continue
 		}
 		if r.kind != kind {
-			if len(out) > 0 {
+			if len(out) > 0 && out[len(out)-1] != "" {
 				out = append(out, "")
 			}
 			out, kind = append(out, ui.dim.Render(headings[r.kind])), r.kind
@@ -172,8 +168,29 @@ func (m *model) sourceColumn(width int) ([]string, int) {
 			sel, styled = len(out), ui.bar.Render(fit(plain, width))
 		}
 		out = append(out, styled)
+		if m.comfortable() {
+			out = append(out, "")
+		}
 	}
 	return out, sel
+}
+
+// insideColumn is the middle column on the targets step: what the folder under
+// the cursor actually holds. None of it is ours to change, so none of it toggles.
+func (m *model) insideColumn(width int) []string {
+	r, ok := m.at()
+	if !ok {
+		return []string{ui.dim.Render("CONTENTS")}
+	}
+	out := []string{ui.dim.Render("CONTENTS  " + trunc(r.name, width-12))}
+	names := inside(r.src)
+	if len(names) == 0 {
+		return append(out, "", ui.dim.Render(" nothing in it to list"))
+	}
+	for _, name := range names {
+		out = append(out, ui.dim.Render(" "+trunc(name, width-2)))
+	}
+	return out
 }
 
 // notOurs is how many entries in the agent folders this repo didn't create.
@@ -228,6 +245,9 @@ func (m *model) skillColumn(width int, inline bool) ([]string, int) {
 			sel, styled = len(out), ui.bar.Render(fit(plain, width))
 		}
 		out = append(out, styled)
+		if m.comfortable() {
+			out = append(out, "")
+		}
 	}
 	if len(out) == 1 {
 		empty := " no skills here"
