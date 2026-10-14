@@ -35,7 +35,10 @@ for name in $(jq -r '.skills[]' <<<"$cfg"); do
   [[ $(grep -c . <<<"$matches") == 1 ]] || { echo "expected one '$name' in $repo/$path, found: ${matches:-none}" >&2; exit 1; }
   cp -R "$matches" "$tmp/vendor/skills/$name"
 done
-[[ -f $tmp/up/LICENSE ]] && cp "$tmp/up/LICENSE" "$tmp/vendor/licenses/$src-LICENSE"
+# nearest LICENSE wins: inside path, its parent, then repo root
+for lic in "$tmp/up/$path/LICENSE" "$tmp/up/$(dirname "$path")/LICENSE" "$tmp/up/LICENSE"; do
+  [[ -f $lic ]] && { cp "$lic" "$tmp/vendor/licenses/$src-LICENSE"; break; }
+done
 
 git -C "$tmp/vendor" add -A
 if git -C "$tmp/vendor" diff --cached --quiet; then

@@ -21,5 +21,19 @@
       "to-tickets",
       "wait-what"
     ]
+  },
+  "pstack": {
+    "repo": "https://github.com/cursor/plugins",
+    "ref": "main",
+    "path": "pstack/skills",
+    "skills": [
+      "blast-radius",
+      "correct",
+      "principle-boundary-discipline",
+      "principle-type-system-discipline",
+      "technical-writing",
+      "typescript-best-practices",
+      "unslop"
+    ]
   }
 }
