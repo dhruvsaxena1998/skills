@@ -7,6 +7,7 @@ The agent skills I use, collected from several upstream repos, with room for my 
 ```text
 skills/<name>/SKILL.md   every skill, flat, whatever its source
 sources.json             which skills to take from which upstream
+hooks/                   vendored hook scripts, plus hooks.json (mine) registering them
 licenses/                upstream licenses
 scripts/sync.sh          pull upstream skills and merge them in
 scripts/link.sh          symlink skills into agent directories
@@ -64,9 +65,12 @@ Add an entry to `sources.json`:
   "repo": "https://github.com/owner/repo",
   "ref": "main",
   "path": "path/to/skills",
-  "skills": ["skill-a", "skill-b"]
+  "skills": ["skill-a", "skill-b"],
+  "files": ["hooks/some-hook-*.js"]
 }
 ```
+
+`files` is optional: extra non-skill files (globs) copied to the same relative path, e.g. ponytail's hook scripts.
 
 Then run `scripts/sync.sh name`. The first run creates `vendor/name`.
 
@@ -79,6 +83,8 @@ scripts/link.sh            # symlink skills into ~/.claude, ~/.agents and ~/.pi/
 scripts/link.sh --unlink   # remove only the links that point into this repo
 ```
 
+It also registers the hooks in `hooks/hooks.json` (ponytail's always-on mode) in `~/.claude/settings.json` and `~/.codex/hooks.json`. They are appended after existing hooks, each file is backed up to `.bak` before writing, and `--unlink` removes only the entries pointing into this repo. Codex asks you to trust new hooks on its next start.
+
 Links are symlinks, so edits in this repo take effect immediately. Existing entries that don't come from this repo are left alone. Re-run after adding or removing skills.
 
-Requires `git` 2.42+ and `jq`.
+Requires `git` 2.42+, `jq`, and `node` for the ponytail hooks.
