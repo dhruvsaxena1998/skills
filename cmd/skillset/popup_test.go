@@ -94,9 +94,14 @@ func TestKeysOverlayListsEveryBoundKey(t *testing.T) {
 			t.Errorf("the %s rail is missing %q, which the table puts on it", b.mode, b.rail)
 		}
 	}
-	for _, mode := range []string{"selection", "filtering", "review"} {
+	// tab steps through the flow again, so the selection rail must carry it and the
+	// rails for a filter and the review, which tab does not reach, must not
+	if !strings.Contains(railLine("selection"), "tab") {
+		t.Error("tab steps through the flow but the selection rail never says so")
+	}
+	for _, mode := range []string{"filtering", "review"} {
 		if strings.Contains(railLine(mode), "tab") {
-			t.Errorf("tab is no longer a binding and must not be on the %s rail", mode)
+			t.Errorf("tab is not a %s key and must not be on its rail", mode)
 		}
 	}
 

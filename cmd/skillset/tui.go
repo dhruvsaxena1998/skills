@@ -64,7 +64,7 @@ type model struct {
 	dirty   bool
 	asked   bool // q pressed once with unsaved changes
 
-	pop     string   // "skill" or "keys" while an overlay is up, "" when none is
+	pop     string   // "skill:<name>" or "keys" while an overlay is up, "" when none is
 	popBody []string // its lines, the first of them its heading
 	popTop  int      // the first of those on screen
 	query   string   // the keys overlay's search box
@@ -385,6 +385,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.resizePop() // a SKILL.md is wrapped at a width, so a resize re-renders it
 	case gitMsg:
 		m.status = string(msg)
 		if err := m.reload(); err != nil {

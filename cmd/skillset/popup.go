@@ -24,18 +24,21 @@ type binding struct {
 var bindings = []binding{
 	{"selection", "space · x", "turn a skill, a source or a target on or off", "space toggle"},
 	{"selection", "↑ ↓ · k j", "move inside a column", ""},
-	{"selection", "← → · h l", "step between the sources and their skills", "←→ columns"},
+	{"selection", "← → · h l", "on the skills step, between the sources and their skills", "←→ columns"},
 	{"selection", "enter", "read the skill's SKILL.md", ""},
+	{"selection", "tab", "the next step: targets, then the review", "tab next step"},
 	{"selection", "/", "filter the skills by name", "/ filter"},
 	{"selection", "?", "this list, the theme and the spacing", "? keys"},
 	{"selection", "s", "review what a save would change", "s review"},
 	{"selection", "p", "pull the repo", "p pull"},
-	{"selection", "q · ctrl+c", "quit, asking once when something is unsaved", "q quit"},
+	{"selection", "esc · q", "go back one: the filter, then the step, then quit (asking once when something is unsaved)", "esc back"},
+	{"selection", "ctrl+c", "quit at once", ""},
 
 	{"filtering", "space", "toggle the row under the cursor", "space toggles"},
 	{"filtering", "↑ ↓", "move the cursor without leaving the filter", "↑↓ move"},
 	{"filtering", "enter", "keep the filter and give the keys back to the list", "enter keeps the filter"},
-	{"filtering", "esc", "clear the filter", "esc clears it"},
+	{"filtering", "esc", "give the keys back, keeping the filter; press it again to clear", "esc unfocuses"},
+	{"filtering", "letters", "text, q included, so a skill with a q in it is searchable", ""},
 
 	{"review", "enter", "apply the plan", "enter applies this"},
 	{"review", "esc · q", "go back", "esc goes back"},
@@ -46,7 +49,7 @@ var bindings = []binding{
 	// shares this rail line without having any
 	{"overlay", "1 … 9", "pick that theme, written as you press it", ""},
 	{"overlay", "0", "compact rows, or comfortable", ""},
-	{"overlay", "esc", "clear the search, then close it where you were", "esc goes back"},
+	{"overlay", "esc · q", "clear the search, then close it where you were; in this list q is text, so only esc", "esc goes back"},
 }
 
 // railLine is a screen's one line of keys, taken from the table so the rail and
@@ -201,10 +204,8 @@ func (m *model) openSkill(name string) {
 	m.popBody = append([]string{head, ""}, lines(markdown(skipFrontmatter(string(body)), min(m.popWidth()-4, 100)))...)
 }
 
-// resizePop re-wraps a SKILL.md after the terminal changes size. The keys overlay
-// is rebuilt from the table on every keystroke and needs nothing.
-// shortcut: nothing calls this yet, because tui.go belongs to another agent this
-// round; add m.resizePop() to its tea.WindowSizeMsg case and resizing is live
+// resizePop re-wraps a SKILL.md after the terminal changes size, keeping your
+// place. The keys overlay is rebuilt from the table on every keystroke already.
 func (m *model) resizePop() {
 	name, ok := strings.CutPrefix(m.pop, "skill:")
 	if !ok {
