@@ -34,7 +34,7 @@ Use this template for writing the PR body:
 
 ## Sections
 
-Skip all preambles and keep prose brief. Use the user's domain language from `GLOSSARY.md`.
+Skip all preambles and keep prose brief. Use the user's domain language from `GLOSSARY.md`. Write all prose through the **unslop** skill (`../unslop/SKILL.md`).
 
 ### Summary
 
@@ -168,3 +168,5 @@ Execution-based evidence is A-tier. Test results, console output. Show the exact
 Describe whether it's a one-way or two-way door. You can walk back through two-way doors, but not one-way doors. A PR that is cheap to roll back is lower risk. Changes that involve destructive actions or hard-to-reverse decisions are one-way doors.
 
 The blast radius is the potential impact or scope of the changes introduced by this PR. Consider all possibilities. Examples are layout shift, breakages for consumers, mobile responsiveness, etc.
+
+Unless the diff is trivial (docs, comments, formatting), find the blast radius by following the **blast-radius** skill (`../blast-radius/SKILL.md`). Put its one-word verdict after **Blast Radius:**, then its confirmed risks and the one fact the change is safe because of, proven or marked unproven.
