@@ -27,6 +27,22 @@ var themes = map[string]Theme{
 		SourceRules: []lipgloss.Color{"#8B5CF6", "#22D3EE", "#F25D94"},
 		FilledTabs:  true,
 	},
+	// the published Catppuccin Mocha palette: mauve, pink, green, yellow, overlay1,
+	// text, base
+	"catppuccin-mocha": {
+		Accent: "#CBA6F7", AccentAlt: "#F5C2E7", OK: "#A6E3A1", Warn: "#F9E2AF",
+		Muted: "#7F849C", Text: "#CDD6F4", Inverse: "#1E1E2E",
+		SourceRules: []lipgloss.Color{"#CBA6F7", "#89DCEB", "#FAB387"},
+		FilledTabs:  true,
+		ColumnRules: true,
+	},
+	// gruvbox dark, bright variants over fg/bg0_h
+	"gruvbox-dark": {
+		Accent: "#FE8019", AccentAlt: "#D3869B", OK: "#B8BB26", Warn: "#FABD2F",
+		Muted: "#928374", Text: "#EBDBB2", Inverse: "#1D2021",
+		SourceRules: []lipgloss.Color{"#FE8019", "#8EC07C", "#D3869B"},
+		ColumnRules: true,
+	},
 }
 
 // styles are the active theme, already built. A lipgloss.Color anywhere outside
@@ -36,6 +52,7 @@ type styles struct {
 	dim, text, ok, warn   lipgloss.Style
 	title, label          lipgloss.Style
 	badge, chip, bar      lipgloss.Style
+	box                   lipgloss.Style
 	tabOn, tabAlt, tabOff lipgloss.Style
 	rules                 []lipgloss.Style
 }
@@ -65,6 +82,7 @@ func newStyles(t Theme) styles {
 		badge: base.Background(t.AccentAlt).Foreground(t.Inverse),
 		chip:  base.Background(t.Warn).Foreground(t.Inverse).Bold(true),
 		bar:   base.Background(t.Accent).Foreground(t.Inverse).Bold(true),
+		box:   base.Border(lipgloss.RoundedBorder()).BorderForeground(t.Accent).Padding(0, 1),
 
 		tabOn:  base.Background(t.Accent).Foreground(t.Inverse).Bold(true).Padding(0, 2),
 		tabAlt: base.Foreground(t.Accent).Bold(true).Underline(true).Padding(0, 2),

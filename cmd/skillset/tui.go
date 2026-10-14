@@ -53,6 +53,11 @@ type model struct {
 	dirty   bool
 	asked   bool // q pressed once with unsaved changes
 
+	pop     string   // "skill" or "keys" while an overlay is up, "" when none is
+	popBody []string // its lines, the first of them its heading
+	popTop  int      // the first of those on screen
+	query   string   // the keys overlay's search box
+
 	desc    map[string]string   // skill -> description, read on demand
 	patches map[string][]string // skill -> local patch commits, read on demand
 
@@ -325,6 +330,10 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 	if msg.String() == "ctrl+c" {
 		return tea.Quit // before the filter and review screens, which swallow keys
 	}
+	if m.pop != "" {
+		m.popKey(msg) // an overlay is over everything and swallows the rest
+		return nil
+	}
 	if m.typing {
 		switch msg.String() {
 		case "enter", "esc":
@@ -390,6 +399,12 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		return pull(m.cfg.Repo)
 	case "s":
 		m.openReview()
+	case "enter":
+		if r, ok := m.at(); ok && r.kind == rowSkill {
+			m.openSkill(r.name)
+		}
+	case "?":
+		m.openKeys()
 	}
 	return nil
 }

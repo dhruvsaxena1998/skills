@@ -9,8 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const help = "space toggle · ←→ columns · / filter · s review · p pull · q quit"
-
 type tabID int
 
 const (
@@ -37,6 +35,9 @@ func (m *model) View() string {
 	body := m.columns(h)
 	if m.review != nil {
 		body = m.reviewPane(h)
+	}
+	if m.pop != "" {
+		body = m.popupPane(h)
 	}
 	return "\n" + m.topLine() + "\n\n  " + m.tabBar() + "\n\n" +
 		body + "\n" + strings.Join(foot, "\n")
@@ -290,12 +291,14 @@ func (m *model) rail() []string {
 		out = append(out, "  "+ui.text.Render(trunc(m.cascade, max(10, m.width-4))))
 	}
 
-	keys := help
+	keys := railLine("selection")
 	switch {
+	case m.pop != "":
+		keys = railLine("overlay")
 	case m.review != nil:
-		keys = "enter applies this · esc goes back"
+		keys = railLine("review")
 	case m.typing:
-		keys = "space toggles · ↑↓ move · enter keeps the filter · esc clears it"
+		keys = railLine("filtering")
 	}
 	left := ""
 	if m.typing || m.filter != "" {
@@ -306,6 +309,18 @@ func (m *model) rail() []string {
 	}
 	return append(out, pair(left, ui.dim.Render(trunc(keys, max(10, m.width-4))), m.width))
 }
+
+// popupPane is the overlay both popups share: a box over the columns, scrolled by
+// the same window the columns use.
+func (m *model) popupPane(h int) string {
+	w := m.popWidth()
+	return lipgloss.NewStyle().MarginLeft(2).
+		Render(ui.box.Render(pad(windowed(m.popBody, &m.popTop, -1, h-2), w-4, h-2)))
+}
+
+// popWidth keeps the box off both edges, and off the far side of a wide screen,
+// where a full-width line of prose is no longer readable.
+func (m *model) popWidth() int { return max(34, min(m.width-6, 96)) }
 
 // reviewPane is the changes tab: every link, unlink and hook file a save would write.
 func (m *model) reviewPane(h int) string {
