@@ -8,7 +8,11 @@ disable-model-invocation: true
 
 Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
 
-The issue tracker and triage label vocabulary should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
+The issue tracker and triage label vocabulary should have been provided to you. If the repo's `CLAUDE.md` or `AGENTS.md` has an `## Agent skills` section (written by `/setup-matt-pocock-skills`), follow it. If not, don't stop: use these defaults, tell the user once which one you picked, and mention that `/setup-matt-pocock-skills` makes the choice permanent.
+
+- **Issue tracker:** local markdown files under `.scratch/<feature-slug>/`, kept out of git so nothing in the repo changes. Before writing, make sure `.scratch/` is ignored: if `git check-ignore -q .scratch` fails, append `.scratch/` to `.git/info/exclude` (local to this clone, never committed). Don't edit `.gitignore` unless the user asks. Follow `../setup-matt-pocock-skills/issue-tracker-local.md` for the file layout.
+- **When the user names a tracker** for this run (GitHub Issues, GitLab Issues, or tracked markdown), use it instead: `../setup-matt-pocock-skills/issue-tracker-github.md` or `issue-tracker-gitlab.md` for the commands, or the local layout without the exclude step.
+- **Triage label:** `ready-for-agent`, written as a `Status:` line in local files. On GitHub or GitLab, create the label if the repo doesn't have it yet.
 
 ## Process
 
@@ -57,7 +61,7 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the tickets to the configured tracker
 
-Publish the approved tickets, writing their prose through the **unslop** skill (`../unslop/SKILL.md`). **How** depends on the tracker `/setup-matt-pocock-skills` configured; the tickets are the same either way, only the shape of the blocking edges changes:
+Publish the approved tickets, writing their prose through the **unslop** skill (`../unslop/SKILL.md`). **How** depends on the tracker in use (configured or default, see above); the tickets are the same either way, only the shape of the blocking edges changes:
 
 - **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below: one ticket per file, never a single combined file.
 - **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. If the source was an existing issue, make each ticket its sub-issue (tracker doc's operation). Apply the `ready-for-agent` triage label unless instructed otherwise; the tickets are agent-grabbable by construction.

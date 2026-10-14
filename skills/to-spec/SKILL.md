@@ -6,7 +6,11 @@ disable-model-invocation: true
 
 This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user; just synthesize what you already know.
 
-The issue tracker and triage label vocabulary should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
+The issue tracker and triage label vocabulary should have been provided to you. If the repo's `CLAUDE.md` or `AGENTS.md` has an `## Agent skills` section (written by `/setup-matt-pocock-skills`), follow it. If not, don't stop: use these defaults, tell the user once which one you picked, and mention that `/setup-matt-pocock-skills` makes the choice permanent.
+
+- **Issue tracker:** local markdown files under `.scratch/<feature-slug>/`, kept out of git so nothing in the repo changes. Before writing, make sure `.scratch/` is ignored: if `git check-ignore -q .scratch` fails, append `.scratch/` to `.git/info/exclude` (local to this clone, never committed). Don't edit `.gitignore` unless the user asks. Follow `../setup-matt-pocock-skills/issue-tracker-local.md` for the file layout.
+- **When the user names a tracker** for this run (GitHub Issues, GitLab Issues, or tracked markdown), use it instead: `../setup-matt-pocock-skills/issue-tracker-github.md` or `issue-tracker-gitlab.md` for the commands, or the local layout without the exclude step.
+- **Triage label:** `ready-for-agent`, written as a `Status:` line in local files. On GitHub or GitLab, create the label if the repo doesn't have it yet.
 
 ## Process
 
