@@ -35,5 +35,18 @@
       "typescript-best-practices",
       "unslop"
     ]
+  },
+  "ponytail": {
+    "repo": "https://github.com/dietrichgebert/ponytail",
+    "ref": "main",
+    "path": "skills",
+    "skills": [
+      "ponytail",
+      "ponytail-audit",
+      "ponytail-debt",
+      "ponytail-gain",
+      "ponytail-help",
+      "ponytail-review"
+    ]
   }
 }
