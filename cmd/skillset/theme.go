@@ -12,6 +12,7 @@ type Theme struct {
 	Muted     lipgloss.Color // headings, counts, anything secondary
 	Text      lipgloss.Color // what you are meant to be reading
 	Inverse   lipgloss.Color // ink, for text sitting on a filled block
+	BarInk    lipgloss.Color // ink on the selection bar, which sits on Accent and needs its own
 
 	SourceRules []lipgloss.Color // cycled, one rule per source
 	FilledTabs  bool             // the active tab as a filled block, or underlined
@@ -23,23 +24,24 @@ const defaultTheme = "atlas"
 var themes = map[string]Theme{
 	"atlas": {
 		Accent: "#8B5CF6", AccentAlt: "#F25D94", OK: "#34D399", Warn: "#FBBF24",
-		Muted: "#64748B", Text: "#E2E8F0", Inverse: "#0F172A",
+		Muted: "#64748B", Text: "#E2E8F0", Inverse: "#0F172A", BarInk: "#F8FAFC",
 		SourceRules: []lipgloss.Color{"#8B5CF6", "#22D3EE", "#F25D94"},
 		FilledTabs:  true,
 	},
 	// the published Catppuccin Mocha palette: mauve, pink, green, yellow, overlay1,
-	// text, base
+	// text, base, and crust for the bar, because mauve is too pale to take light ink
 	"catppuccin-mocha": {
 		Accent: "#CBA6F7", AccentAlt: "#F5C2E7", OK: "#A6E3A1", Warn: "#F9E2AF",
-		Muted: "#7F849C", Text: "#CDD6F4", Inverse: "#1E1E2E",
+		Muted: "#7F849C", Text: "#CDD6F4", Inverse: "#1E1E2E", BarInk: "#11111B",
 		SourceRules: []lipgloss.Color{"#CBA6F7", "#89DCEB", "#FAB387"},
 		FilledTabs:  true,
 		ColumnRules: true,
 	},
-	// gruvbox dark, bright variants over fg/bg0_h
+	// gruvbox dark, bright variants over fg/bg0_h; the bar keeps bg0_h too, since
+	// bright orange is a light colour
 	"gruvbox-dark": {
 		Accent: "#FE8019", AccentAlt: "#D3869B", OK: "#B8BB26", Warn: "#FABD2F",
-		Muted: "#928374", Text: "#EBDBB2", Inverse: "#1D2021",
+		Muted: "#928374", Text: "#EBDBB2", Inverse: "#1D2021", BarInk: "#1D2021",
 		SourceRules: []lipgloss.Color{"#FE8019", "#8EC07C", "#D3869B"},
 		ColumnRules: true,
 	},
@@ -81,7 +83,7 @@ func newStyles(t Theme) styles {
 		label: base.Foreground(t.Accent),
 		badge: base.Background(t.AccentAlt).Foreground(t.Inverse),
 		chip:  base.Background(t.Warn).Foreground(t.Inverse).Bold(true),
-		bar:   base.Background(t.Accent).Foreground(t.Inverse).Bold(true),
+		bar:   base.Background(t.Accent).Foreground(t.BarInk).Bold(true),
 		box:   base.Border(lipgloss.RoundedBorder()).BorderForeground(t.Accent).Padding(0, 1),
 
 		tabOn:  base.Background(t.Accent).Foreground(t.Inverse).Bold(true).Padding(0, 2),
