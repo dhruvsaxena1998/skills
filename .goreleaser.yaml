@@ -1,0 +1,20 @@
+version: 2
+
+project_name: skillset
+
+builds:
+  - main: ./cmd/skillset
+    binary: skillset
+    env: [CGO_ENABLED=0]
+    goos: [darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags: [-s -w]
+
+archives:
+  # Plain binaries, not tarballs: the installers and `skillset update` then need
+  # nothing but a download, on a machine that has neither tar nor unzip on the PATH.
+  - formats: [binary]
+    name_template: skillset_{{ .Os }}_{{ .Arch }}
+
+changelog:
+  use: github

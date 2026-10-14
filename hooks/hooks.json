@@ -1,17 +1,20 @@
 {
   "SessionStart": [
     {
+      "skill": "ponytail",
       "matcher": "startup|resume|clear|compact",
       "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/hooks/ponytail-activate.js\"", "timeout": 5, "statusMessage": "Loading ponytail mode..." }]
     }
   ],
   "SubagentStart": [
     {
+      "skill": "ponytail",
       "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/hooks/ponytail-subagent.js\"", "timeout": 5, "statusMessage": "Loading ponytail mode..." }]
     }
   ],
   "UserPromptSubmit": [
     {
+      "skill": "ponytail",
       "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/hooks/ponytail-mode-tracker.js\"", "timeout": 5, "statusMessage": "Tracking ponytail mode..." }]
     }
   ]

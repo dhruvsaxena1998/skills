@@ -20,7 +20,25 @@
       "to-spec",
       "to-tickets",
       "wait-what"
-    ]
+    ],
+    "deps": {
+      "codebase-design": {},
+      "diagnosing-bugs": {},
+      "domain-modeling": { "optional": ["unslop"] },
+      "grill-with-docs": { "requires": ["domain-modeling", "grilling"] },
+      "grilling": {},
+      "handoff": { "optional": ["unslop"] },
+      "implement-spec": { "optional": ["setup-matt-pocock-skills", "tdd"] },
+      "pr": { "optional": ["blast-radius", "unslop"] },
+      "prototype": {},
+      "research": { "optional": ["unslop"] },
+      "setup-matt-pocock-skills": {},
+      "tdd": { "optional": ["codebase-design"] },
+      "to-questionnaire": { "optional": ["unslop"] },
+      "to-spec": { "optional": ["prototype", "setup-matt-pocock-skills", "unslop"] },
+      "to-tickets": { "optional": ["prototype", "setup-matt-pocock-skills", "unslop"] },
+      "wait-what": {}
+    }
   },
   "pstack": {
     "repo": "https://github.com/cursor/plugins",
@@ -34,7 +52,16 @@
       "technical-writing",
       "typescript-best-practices",
       "unslop"
-    ]
+    ],
+    "deps": {
+      "blast-radius": { "optional": ["unslop"] },
+      "correct": {},
+      "principle-boundary-discipline": {},
+      "principle-type-system-discipline": { "requires": ["principle-boundary-discipline"] },
+      "technical-writing": { "optional": ["unslop"] },
+      "typescript-best-practices": { "requires": ["principle-boundary-discipline", "principle-type-system-discipline"] },
+      "unslop": {}
+    }
   },
   "ponytail": {
     "repo": "https://github.com/dietrichgebert/ponytail",
@@ -52,6 +79,14 @@
       "hooks/ponytail-*.js",
       "hooks/ponytail-statusline.sh",
       "hooks/ponytail-statusline.ps1"
-    ]
+    ],
+    "deps": {
+      "ponytail": {},
+      "ponytail-audit": { "optional": ["ponytail"] },
+      "ponytail-debt": { "requires": ["ponytail"] },
+      "ponytail-gain": { "requires": ["ponytail"] },
+      "ponytail-help": { "requires": ["ponytail"] },
+      "ponytail-review": { "optional": ["ponytail"] }
+    }
   }
 }
