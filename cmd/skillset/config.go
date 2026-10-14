@@ -14,6 +14,9 @@ type Config struct {
 	Targets []string `json:"targets"`
 	Enabled []string `json:"enabled"`
 	Seen    []string `json:"seen"`
+	// Theme picks the screen's look by name; empty, or a name that no longer
+	// exists, falls back to the default.
+	Theme string `json:"theme,omitempty"`
 }
 
 var errNotSetUp = errors.New("not set up on this machine yet: run `skillset init` inside your skills clone, or `skillset init <path>`")

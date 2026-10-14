@@ -38,6 +38,7 @@ func goTo(t *testing.T, m *model, name string) {
 	for i, idx := range m.shown {
 		if m.rows[idx].name == name {
 			m.cursor = i
+			m.mark()
 			return
 		}
 	}
@@ -182,12 +183,79 @@ func TestTUIRenders(t *testing.T) {
 
 	view := m.View()
 
-	for _, want := range []string{"AGENT TARGETS", "claude", "[x] base", "[ ] app", "new", "NOT MANAGED HERE", "requires: core"} {
+	for _, want := range []string{
+		"skillset", "skills", "targets", "changes", // the tab bar
+		"SOURCES", "▌ s", "2/3", // the sources column, with its rule and tally
+		"TARGETS", "◉ claude", "○ agents",
+		"NOT OURS", "synced",
+		"SKILLS", "example.test/s", "◉ base", "○ app", // the skills of the source we are on
+		"DETAIL", "requires   core", "optional   nice", // the detail of the skill we are on
+		"2/4 on", "1 target", "up to date with origin",
+	} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the screen is missing %q", want)
 		}
 	}
+
+	// the new badge rides on the skill itself, so it has to be where that skill is
+	goTo(t, m, "nice")
+	if !strings.Contains(m.View(), "new") {
+		t.Error("an unseen skill should be badged on screen")
+	}
 	t.Log("\n" + view)
+}
+
+// TestTUIMovesBetweenColumns covers the one thing the flat list didn't have: a
+// skill belongs to the source left of it, and only its siblings are a step away.
+func TestTUIMovesBetweenColumns(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	goTo(t, m, "app")
+
+	press(m, "h") // out of the skills column, onto the source it belongs to
+	if r, _ := m.at(); r.kind != rowSource || r.name != "s" {
+		t.Fatalf("h landed on %+v, want the source s", r)
+	}
+
+	press(m, "j") // the first column moves source to source, never into a skill
+	if r, _ := m.at(); r.name != "t" {
+		t.Fatalf("j landed on %q, want the next source", r.name)
+	}
+	if m.source != "t" {
+		t.Fatalf("the skills column is showing %q, want the source under the cursor", m.source)
+	}
+
+	press(m, "l") // into that source's skills
+	if r, _ := m.at(); r.kind != rowSkill || r.name != "nice" {
+		t.Fatalf("l landed on %+v, want the first skill of t", r)
+	}
+	press(m, "j") // t has one skill, so down must stay put rather than fall into s
+	if r, _ := m.at(); r.name != "nice" {
+		t.Fatalf("j left the column, landing on %q", r.name)
+	}
+}
+
+// TestTUITabBarGoesSomewhere: a tab that doesn't respond to a key is decoration.
+func TestTUITabBarGoesSomewhere(t *testing.T) {
+	m, _, _ := tuiModel(t)
+	goTo(t, m, "app")
+	if m.tab() != tabSkills {
+		t.Fatal("a skill under the cursor is the skills tab")
+	}
+
+	m.key(tea.KeyMsg{Type: tea.KeyTab})
+	if r, _ := m.at(); r.kind != rowTarget || m.tab() != tabTargets {
+		t.Fatalf("tab landed on %+v, want the first target", r)
+	}
+
+	m.key(tea.KeyMsg{Type: tea.KeyTab})
+	if m.review == nil || m.tab() != tabChanges {
+		t.Fatal("tab from the targets should open the changes")
+	}
+
+	m.key(tea.KeyMsg{Type: tea.KeyTab})
+	if r, _ := m.at(); m.review != nil || r.kind != rowSkill {
+		t.Fatalf("tab should come back round to the skills, got %+v", r)
+	}
 }
 
 func TestTUIReadsADescriptionWrittenAsAYAMLBlock(t *testing.T) {

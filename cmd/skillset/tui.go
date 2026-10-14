@@ -10,27 +10,20 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-)
-
-var (
-	bold  = lipgloss.NewStyle().Bold(true)
-	dim   = lipgloss.NewStyle().Faint(true)
-	warn  = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	on    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	cur   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
-	fresh = lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
 )
 
 type rowKind int
 
+// The order is the order of the first column: sources, then targets, then the
+// entries we don't own. Column one prints a heading wherever the kind changes.
 const (
-	rowHeader rowKind = iota // a label, never selectable
-	rowTarget
-	rowSource
+	rowSource rowKind = iota
 	rowSkill
+	rowTarget
 	rowOther // an entry in an agent folder that this repo didn't create
 )
+
+var headings = map[rowKind]string{rowSource: "SOURCES", rowTarget: "TARGETS", rowOther: "NOT OURS"}
 
 type row struct {
 	kind rowKind
@@ -45,10 +38,13 @@ type model struct {
 	sources map[string]source
 	home    string
 
-	rows    []row // everything, unfiltered
-	shown   []int // indexes into rows that pass the filter
-	cursor  int   // index into shown
-	top     int   // first visible line, for scrolling
+	rows   []row  // everything, unfiltered
+	shown  []int  // indexes into rows that pass the filter
+	cursor int    // index into shown
+	source string // the source whose skills the middle column is showing
+
+	left, mid int // first visible line of each column, for scrolling
+
 	filter  string
 	typing  bool     // the filter line has focus
 	review  []string // the plan, when it is on screen
@@ -70,6 +66,7 @@ func tuiCmd() error {
 	if err != nil {
 		return err
 	}
+	useTheme(cfg.Theme)
 	m, err := newModel(cfg)
 	if err != nil {
 		return err
@@ -112,11 +109,7 @@ func (m *model) build() {
 	inRepo := repoSkills(m.cfg.Repo)
 	slices.Sort(inRepo)
 
-	m.rows = []row{{kind: rowHeader, name: "agent targets"}}
-	for _, t := range targets {
-		m.rows = append(m.rows, row{kind: rowTarget, name: t.name, note: filepath.Join("~", t.dir)})
-	}
-
+	m.rows = nil
 	listed := map[string]bool{}
 	for _, name := range slices.Sorted(maps.Keys(m.sources)) {
 		m.rows = append(m.rows, row{kind: rowSource, name: name})
@@ -141,11 +134,31 @@ func (m *model) build() {
 		}
 	}
 
-	if other := m.unmanaged(); len(other) > 0 {
-		m.rows = append(m.rows, row{kind: rowHeader, name: "not managed here, never touched"})
-		m.rows = append(m.rows, other...)
+	for _, t := range targets {
+		m.rows = append(m.rows, row{kind: rowTarget, name: t.name, note: filepath.Join("~", t.dir)})
+	}
+	m.rows = append(m.rows, m.unmanaged()...)
+
+	if m.sourceRow(m.source) < 0 {
+		m.source = ""
+		for _, r := range m.rows {
+			if r.kind == rowSource {
+				m.source = r.name
+				break
+			}
+		}
 	}
 	m.refilter()
+}
+
+// sourceRow is where a source sits in rows, or -1 when it no longer exists.
+func (m *model) sourceRow(name string) int {
+	for i, r := range m.rows {
+		if r.kind == rowSource && r.name == name {
+			return i
+		}
+	}
+	return -1
 }
 
 func (m *model) skillRow(skill, src string) row {
@@ -188,8 +201,8 @@ func (m *model) refilter() {
 	for i, r := range m.rows {
 		switch {
 		case f == "":
-		case r.kind == rowHeader || r.kind == rowSource:
-			continue // a header only earns its place through a child below
+		case r.kind == rowSource:
+			continue // a filter is a search for skills; a source can't match one
 		case !strings.Contains(strings.ToLower(r.name), f):
 			continue
 		}
@@ -198,22 +211,70 @@ func (m *model) refilter() {
 	if m.cursor >= len(m.shown) {
 		m.cursor = max(0, len(m.shown)-1)
 	}
-	m.skipHeader(1)
+	m.mark()
 }
 
-// skipHeader moves off a label row, which can't be selected.
-func (m *model) skipHeader(step int) {
-	for len(m.shown) > 0 && m.rows[m.shown[m.cursor]].kind == rowHeader {
-		next := m.cursor + step
-		if next < 0 || next >= len(m.shown) {
-			step = -step
-			next = m.cursor + step
-		}
-		if next < 0 || next >= len(m.shown) {
-			return
-		}
-		m.cursor = next
+// at is the row under the cursor, and whether there is one at all.
+func (m *model) at() (row, bool) {
+	if len(m.shown) == 0 {
+		return row{}, false
 	}
+	return m.rows[m.shown[m.cursor]], true
+}
+
+// mark remembers which source the skills column is showing, so stepping onto a
+// target or a foreign entry doesn't empty it.
+func (m *model) mark() {
+	switch r, ok := m.at(); {
+	case !ok:
+	case r.kind == rowSource:
+		m.source = r.name
+	case r.kind == rowSkill:
+		m.source = r.src
+	}
+}
+
+// column lists the rows the cursor can reach without changing columns: the skills
+// of the current source, or everything in the first column. While a filter is on,
+// every matching skill is in the middle column, whatever source it came from.
+func (m *model) column() []int {
+	r, ok := m.at()
+	if !ok {
+		return nil
+	}
+	var out []int
+	for i, idx := range m.shown {
+		other := m.rows[idx]
+		if (other.kind == rowSkill) != (r.kind == rowSkill) {
+			continue
+		}
+		if other.kind == rowSkill && m.filter == "" && other.src != m.source {
+			continue
+		}
+		out = append(out, i)
+	}
+	return out
+}
+
+// move steps up or down inside the current column.
+func (m *model) move(step int) {
+	col := m.column()
+	if at := slices.Index(col, m.cursor); at >= 0 {
+		m.cursor = col[min(max(at+step, 0), len(col)-1)]
+	}
+	m.mark()
+}
+
+// jump puts the cursor on the first shown row of a kind, with an optional name.
+func (m *model) jump(kind rowKind, name string) bool {
+	for i, idx := range m.shown {
+		if r := m.rows[idx]; r.kind == kind && (name == "" || r.name == name || r.src == name) {
+			m.cursor = i
+			m.mark()
+			return true
+		}
+	}
+	return false
 }
 
 func (m *model) Init() tea.Cmd { return gitPosition(m.cfg.Repo) }
@@ -289,6 +350,8 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 			return m.save()
 		case "esc", "q":
 			m.review = nil
+		case "tab":
+			m.nextTab() // the tab bar still works from behind the review
 		}
 		return nil
 	}
@@ -297,20 +360,25 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 	case "q":
 		if m.dirty && !m.asked {
 			m.asked = true
-			m.status = "unsaved changes — s to review them, q again to discard"
+			// the rail, not the top line: at 80 columns the top line would cut it
+			m.cascade = "unsaved changes — s to review them, q again to discard"
 			return nil
 		}
 		return tea.Quit
 	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
-			m.skipHeader(-1)
-		}
+		m.move(-1)
 	case "down", "j":
-		if m.cursor < len(m.shown)-1 {
-			m.cursor++
-			m.skipHeader(1)
+		m.move(1)
+	case "left", "h":
+		if r, ok := m.at(); ok && r.kind == rowSkill {
+			m.jump(rowSource, r.src)
 		}
+	case "right", "l":
+		if r, ok := m.at(); ok && r.kind != rowSkill {
+			m.jump(rowSkill, m.source)
+		}
+	case "tab":
+		m.nextTab()
 	case " ", "x":
 		m.toggle()
 	case "/":
@@ -319,17 +387,37 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		m.status = "pulling..."
 		return pull(m.cfg.Repo)
 	case "s":
-		var buf bytes.Buffer
-		if err := apply(m.cfg, &buf, true); err != nil {
-			m.status = err.Error()
-			return nil
-		}
-		m.review = lines(buf.String())
-		if len(m.review) == 0 {
-			m.review = []string{"nothing to change"}
-		}
+		m.openReview()
 	}
 	return nil
+}
+
+// nextTab walks the tab bar: the skills, the targets, then the changes they add up
+// to. The bar is only worth drawing if it goes somewhere, so every tab is a place.
+func (m *model) nextTab() {
+	switch m.tab() {
+	case tabSkills:
+		if !m.jump(rowTarget, "") {
+			m.openReview()
+		}
+	case tabTargets:
+		m.openReview()
+	default:
+		m.review = nil
+		m.jump(rowSkill, m.source)
+	}
+}
+
+func (m *model) openReview() {
+	var buf bytes.Buffer
+	if err := apply(m.cfg, &buf, true); err != nil {
+		m.status = err.Error()
+		return
+	}
+	m.review = lines(buf.String())
+	if len(m.review) == 0 {
+		m.review = []string{"nothing to change"}
+	}
 }
 
 // save applies the selection for real, through the same code as `skillset apply`.
@@ -355,10 +443,10 @@ func (m *model) save() tea.Cmd {
 }
 
 func (m *model) toggle() {
-	if len(m.shown) == 0 {
+	r, ok := m.at()
+	if !ok {
 		return
 	}
-	r := m.rows[m.shown[m.cursor]]
 	m.cascade, m.asked = "", false
 	switch r.kind {
 	case rowTarget:
@@ -479,192 +567,6 @@ func lines(s string) []string {
 		return nil
 	}
 	return strings.Split(s, "\n")
-}
-
-const help = "space toggle · / filter · s review and save · p pull · q quit"
-
-func (m *model) View() string {
-	if m.review != nil {
-		fits := max(5, m.height-6)
-		body := m.review
-		more := ""
-		if len(body) > fits {
-			more = dim.Render(fmt.Sprintf("\n… and %d more", len(body)-fits))
-			body = body[:fits]
-		}
-		return bold.Render("review ") + dim.Render(countPlan(m.review)) + "\n\n" +
-			strings.Join(body, "\n") + more + "\n\n" +
-			dim.Render("enter applies this · esc goes back")
-	}
-
-	var foot []string
-	if m.cascade != "" {
-		foot = append(foot, m.cascade)
-	}
-	for _, w := range warnings(m.cfg, m.deps) {
-		foot = append(foot, warn.Render(w))
-	}
-	if m.status != "" {
-		foot = append(foot, dim.Render(m.status))
-	}
-	detailW := max(30, m.width/3)
-	listW := max(30, m.width-detailW-3)
-	rows := m.list(listW, max(5, m.height-len(foot)-5))
-	panes := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(listW).Render(rows),
-		dim.Render(" │ "),
-		lipgloss.NewStyle().Width(detailW).Render(m.detail()))
-
-	filter := ""
-	if m.typing || m.filter != "" {
-		filter = "  filter: " + m.filter + "▌"
-	}
-	return bold.Render("skillset") + dim.Render("  "+m.cfg.Repo) + filter + "\n\n" +
-		panes + "\n\n" + strings.Join(foot, "\n") + "\n" + dim.Render(help)
-}
-
-// list renders the visible slice of rows, keeping the cursor on screen.
-func (m *model) list(width, height int) string {
-	if m.cursor < m.top {
-		m.top = m.cursor
-	}
-	if m.cursor >= m.top+height {
-		m.top = m.cursor - height + 1
-	}
-	var b strings.Builder
-	for i := m.top; i < len(m.shown) && i < m.top+height; i++ {
-		r := m.rows[m.shown[i]]
-		line := m.line(r)
-		if i == m.cursor {
-			line = cur.Render("› ") + line
-		} else {
-			line = "  " + line
-		}
-		b.WriteString(line + "\n")
-	}
-	if len(m.shown) > m.top+height {
-		b.WriteString(dim.Render(fmt.Sprintf("  … %d more", len(m.shown)-m.top-height)))
-	}
-	return b.String()
-}
-
-func (m *model) line(r row) string {
-	switch r.kind {
-	case rowHeader:
-		return dim.Render(strings.ToUpper(r.name))
-	case rowTarget:
-		return m.box(slices.Contains(m.cfg.Targets, r.name)) + " " + r.name + dim.Render("  "+r.note)
-	case rowSource:
-		count, total := 0, 0
-		skillsDir := filepath.Join(m.cfg.Repo, "skills")
-		for _, s := range m.sourceSkills(r.name) {
-			if !isSkill(skillsDir, s) {
-				continue
-			}
-			total++
-			if slices.Contains(m.cfg.Enabled, s) {
-				count++
-			}
-		}
-		state := m.box(count == total && total > 0)
-		if count > 0 && count < total {
-			state = "[~]"
-		}
-		return state + " " + bold.Render(r.name) + dim.Render(fmt.Sprintf("  %d/%d", count, total))
-	case rowSkill:
-		line := "  " + m.box(slices.Contains(m.cfg.Enabled, r.name)) + " " + r.name
-		if r.note != "" {
-			line += " " + fresh.Render("new")
-		}
-		return line
-	default:
-		return dim.Render("  " + r.name + "  " + r.note)
-	}
-}
-
-// countPlan summarises a review, which is longer than the screen on a first apply.
-func countPlan(plan []string) string {
-	var links, unlinks, hooks int
-	for _, line := range plan {
-		switch {
-		case strings.HasPrefix(line, "link "):
-			links++
-		case strings.HasPrefix(line, "unlink "):
-			unlinks++
-		case strings.HasPrefix(line, "update hooks"):
-			hooks++
-		}
-	}
-	return fmt.Sprintf("%d links · %d unlinks · %d hook files", links, unlinks, hooks)
-}
-
-func (m *model) box(checked bool) string {
-	if checked {
-		return on.Render("[x]")
-	}
-	return "[ ]"
-}
-
-// detail explains the highlighted skill, so a choice doesn't need a file open.
-func (m *model) detail() string {
-	if len(m.shown) == 0 {
-		return dim.Render("nothing matches " + m.filter)
-	}
-	r := m.rows[m.shown[m.cursor]]
-	switch r.kind {
-	case rowTarget:
-		for _, t := range targets {
-			if t.name == r.name {
-				return bold.Render(r.name) + "\n\nskills: ~/" + filepath.ToSlash(t.dir) +
-					"\nhooks:  ~/" + filepath.ToSlash(t.hooks)
-			}
-		}
-	case rowSource:
-		s := m.sources[r.name]
-		if s.Repo == "" {
-			return bold.Render(r.name) + "\n\n" + dim.Render("in the repo, in no source")
-		}
-		return bold.Render(r.name) + "\n\n" + s.Repo + "\nbranch " + s.Ref + "\npath " + s.Path
-	case rowSkill:
-		return m.skillDetail(r)
-	case rowOther:
-		return bold.Render("not ours") + "\n\n" + r.name + "\n" + r.note +
-			"\n\n" + dim.Render("shown so it isn't a surprise; skillset never changes it")
-	}
-	return ""
-}
-
-func (m *model) skillDetail(r row) string {
-	var b strings.Builder
-	b.WriteString(bold.Render(r.name) + "\n")
-	state := "off"
-	if slices.Contains(m.cfg.Enabled, r.name) {
-		state = on.Render("enabled")
-	}
-	if r.note == "new" {
-		state += " " + fresh.Render("new")
-	}
-	b.WriteString(state + dim.Render("  "+r.src) + "\n\n")
-
-	d := m.deps[r.name]
-	var dependents []string
-	withDependents(r.name, m.deps, &dependents)
-	dependents = slices.DeleteFunc(dependents, func(s string) bool { return s == r.name })
-	for _, pair := range [][2]any{{"requires", d.Requires}, {"optional", d.Optional}, {"required by", dependents}} {
-		if list := pair[1].([]string); len(list) > 0 {
-			b.WriteString(dim.Render(pair[0].(string)+": ") + strings.Join(list, ", ") + "\n")
-		}
-	}
-	if patches := m.patchesFor(r.name); len(patches) > 0 {
-		b.WriteString(dim.Render("local patches:") + "\n")
-		for _, p := range patches {
-			b.WriteString("  " + p + "\n")
-		}
-	}
-	if desc := m.descriptionOf(r.name); desc != "" {
-		b.WriteString("\n" + desc)
-	}
-	return b.String()
 }
 
 // descriptionOf reads the skill's own description out of its frontmatter.
