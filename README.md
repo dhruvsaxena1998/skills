@@ -18,6 +18,7 @@ scripts/link.sh          symlink skills into agent directories
 | ------------ | ------------------------------------------------------------------------ | ------------------- |
 | `mattpocock` | [mattpocock/skills](https://github.com/mattpocock/skills)                | `vendor/mattpocock` |
 | `pstack`     | [cursor/plugins › pstack](https://github.com/cursor/plugins/tree/main/pstack) | `vendor/pstack`     |
+| `ponytail`   | [dietrichgebert/ponytail](https://github.com/dietrichgebert/ponytail)    | `vendor/ponytail`   |
 
 ## How upstream sync works
 
