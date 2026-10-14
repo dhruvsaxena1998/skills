@@ -35,6 +35,8 @@ func run(args []string, out io.Writer, in io.Reader) error {
 		return enableCmd(args[1:], out)
 	case "disable":
 		return disableCmd(args[1:], out)
+	case "sync":
+		return syncCmd(args[1:], out)
 	case "apply":
 		cfg, err := loadConfig()
 		if err != nil {

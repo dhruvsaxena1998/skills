@@ -17,17 +17,34 @@ type dep struct {
 	Optional []string `json:"optional"`
 }
 
-// loadDeps reads sources.json and merges every source's map, since dependencies cross sources.
-func loadDeps(repo string) (map[string]dep, error) {
+// source is one upstream in sources.json: where its skills come from, which ones we
+// take, and how they depend on each other.
+type source struct {
+	Repo   string         `json:"repo"`
+	Ref    string         `json:"ref"`
+	Path   string         `json:"path"`
+	Skills []string       `json:"skills"`
+	Files  []string       `json:"files"`
+	Deps   map[string]dep `json:"deps"`
+}
+
+func loadSources(repo string) (map[string]source, error) {
 	data, err := os.ReadFile(filepath.Join(repo, "sources.json"))
 	if err != nil {
 		return nil, err
 	}
-	var sources map[string]struct {
-		Deps map[string]dep `json:"deps"`
-	}
+	var sources map[string]source
 	if err := json.Unmarshal(data, &sources); err != nil {
 		return nil, fmt.Errorf("sources.json: %w", err)
+	}
+	return sources, nil
+}
+
+// loadDeps reads sources.json and merges every source's map, since dependencies cross sources.
+func loadDeps(repo string) (map[string]dep, error) {
+	sources, err := loadSources(repo)
+	if err != nil {
+		return nil, err
 	}
 	all := map[string]dep{}
 	for _, s := range sources {
