@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -59,10 +60,14 @@ type model struct {
 	filter  string
 	typing  bool     // the filter line has focus
 	review  []string // the plan, when it is on screen
-	cascade string   // what the last toggle pulled in or dropped
+	cascade string   // what a save would change, and what the last toggle dragged along
 	status  string   // git position, or the result of the last action
-	dirty   bool
-	asked   bool // q pressed once with unsaved changes
+	dirty   bool     // there is something a save would write
+	asked   bool     // q pressed once with unsaved changes
+
+	// the selection as it was last written, so the rail can say what a save would
+	// change rather than only what the last toggle did
+	savedOn, savedTargets []string
 
 	pop     string   // "skill:<name>" or "keys" while an overlay is up, "" when none is
 	popBody []string // its lines, the first of them its heading
@@ -70,8 +75,13 @@ type model struct {
 	query   string   // the keys overlay's search box
 
 	desc    map[string]string   // skill -> description, read on demand
-	patches map[string][]string // skill -> local patch commits, read on demand
+	patches map[string][]string // skill -> local patch commits, loaded off the draw
 
+	loading map[string]bool // the slow work that is outstanding, by key
+	frame   int             // the spinner's frame while any of it is
+	ticking bool            // a tick is already in flight, and one is enough
+
+	hit           layout // where the last draw put things, so a click can find its row
 	width, height int
 }
 
@@ -87,7 +97,7 @@ func tuiCmd() error {
 	if err != nil {
 		return err
 	}
-	_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	return err
 }
 
@@ -97,7 +107,8 @@ func newModel(cfg *Config) (*model, error) {
 		return nil, err
 	}
 	m := &model{cfg: cfg, home: home, width: 100, height: 30,
-		desc: map[string]string{}, patches: map[string][]string{}}
+		desc: map[string]string{}, patches: map[string][]string{}, loading: map[string]bool{},
+		savedOn: slices.Clone(cfg.Enabled), savedTargets: slices.Clone(cfg.Targets)}
 	if err := m.reload(); err != nil {
 		return nil, err
 	}
@@ -283,6 +294,7 @@ func (m *model) move(step int) {
 	if at := slices.Index(col, m.cursor); at >= 0 {
 		m.cursor = col[min(max(at+step, 0), len(col)-1)]
 	}
+	m.clear()
 	m.mark()
 }
 
@@ -291,12 +303,17 @@ func (m *model) jump(kind rowKind, name string) bool {
 	for i, idx := range m.shown {
 		if r := m.rows[idx]; r.kind == kind && (name == "" || r.name == name || r.src == name) {
 			m.cursor = i
+			m.clear()
 			m.mark()
 			return true
 		}
 	}
 	return false
 }
+
+// clear drops the rail's line once the cursor leaves the row it was about, and
+// the pending quit with it, so a q after wandering off still asks once.
+func (m *model) clear() { m.cascade, m.asked = "", false }
 
 // setStep moves to a step of the flow. The changes step is the review, which is
 // built fresh and sits over the step you opened it from.
@@ -352,9 +369,70 @@ func inside(dir string) []string {
 	return out
 }
 
-func (m *model) Init() tea.Cmd { return gitPosition(m.cfg.Repo) }
+// Init draws first and asks origin afterwards: the fetch is a second or more of
+// network, and the screen is useful before it answers.
+func (m *model) Init() tea.Cmd {
+	m.status = "checking origin"
+	return tea.Batch(m.work("origin", gitPosition(m.cfg.Repo)), m.load())
+}
+
+// work starts something slow and keeps the spinner turning while it runs. Every
+// slow thing in here goes through it, so nothing can block a draw.
+func (m *model) work(key string, cmd tea.Cmd) tea.Cmd {
+	m.loading[key] = true
+	if m.ticking {
+		return cmd
+	}
+	m.ticking = true
+	return tea.Batch(cmd, tick())
+}
+
+// load is the slow work the row under the cursor needs, if it isn't loaded or
+// already on its way. The detail pane renders what is known and nothing waits.
+func (m *model) load() tea.Cmd {
+	r, ok := m.at()
+	if !ok || r.kind != rowSkill {
+		return nil
+	}
+	key := "patch:" + r.name
+	if _, done := m.patches[r.name]; done || m.loading[key] {
+		return nil
+	}
+	return m.work(key, patchesFor(m.cfg.Repo, r.name))
+}
+
+type tickMsg struct{}
+
+func tick() tea.Cmd {
+	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+// spin is the sign that something is still running. It only moves while work is
+// outstanding, so an idle screen is never redrawn.
+func (m *model) spin() string {
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"}
+	return frames[m.frame%len(frames)]
+}
 
 type gitMsg string
+
+type patchMsg struct {
+	name string
+	list []string
+}
+
+// patchesFor lists this repo's own commits against the skill, by the patch(
+// convention. It is a command because git against a real repo is tens of
+// milliseconds, and the detail pane asks for it on every cursor move.
+func patchesFor(repo, name string) tea.Cmd {
+	return func() tea.Msg {
+		out, err := git(repo, "log", "--oneline", "--grep", "^patch", "--", filepath.Join("skills", name))
+		if err != nil {
+			return patchMsg{name: name}
+		}
+		return patchMsg{name: name, list: lines(out)}
+	}
+}
 
 // gitPosition asks origin where we stand, without changing anything.
 func gitPosition(repo string) tea.Cmd {
@@ -382,19 +460,95 @@ func pull(repo string) tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.resizePop() // a SKILL.md is wrapped at a width, so a resize re-renders it
+	case tickMsg:
+		m.frame++
+		if len(m.loading) > 0 {
+			return m, tick()
+		}
+		m.ticking = false
+		return m, nil
+	case patchMsg:
+		delete(m.loading, "patch:"+msg.name)
+		m.patches[msg.name] = msg.list
+		return m, nil
 	case gitMsg:
+		delete(m.loading, "origin")
 		m.status = string(msg)
 		if err := m.reload(); err != nil {
 			m.status = err.Error()
 		}
 	case tea.KeyMsg:
-		return m, m.key(msg)
+		cmd = m.key(msg)
+	case tea.MouseMsg:
+		m.mouse(msg)
 	}
-	return m, nil
+	return m, tea.Batch(cmd, m.load())
+}
+
+// mouse is the pointer: the wheel scrolls whatever is under it, a click puts the
+// cursor on a row or steps to a tab. A click never toggles, so a stray one can
+// never change what a save would write.
+func (m *model) mouse(msg tea.MouseMsg) {
+	switch {
+	case msg.Button == tea.MouseButtonWheelUp:
+		m.scroll(msg.X, -1)
+	case msg.Button == tea.MouseButtonWheelDown:
+		m.scroll(msg.X, 1)
+	case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
+		m.click(msg.X, msg.Y)
+	}
+}
+
+// scroll moves what the pointer is over. A column scrolls by moving the cursor
+// inside it, since the column follows the cursor; the pointer picks which one.
+func (m *model) scroll(x, step int) {
+	switch r, ok := m.at(); {
+	case m.pop != "":
+		m.popTop += step
+		return
+	case m.review != nil || x >= m.hit.x3:
+		return // the review and the detail column are cut to fit, not scrolled
+	case !ok:
+	case x >= m.hit.x2 && r.kind != rowSkill:
+		m.jump(rowSkill, m.source)
+	case x < m.hit.x2 && r.kind == rowSkill:
+		m.jump(rowSource, r.src)
+	}
+	m.move(step)
+}
+
+// click puts the cursor where you pointed. Toggling stays on space alone.
+func (m *model) click(x, y int) {
+	if m.pop != "" {
+		return // the overlay is over everything; esc is the way out of it
+	}
+	if y == tabLine {
+		for i, end := range m.hit.tabs {
+			if x < end {
+				m.review = nil // a tab is a way out of the review, as esc is
+				m.setStep(tabID(i))
+				return
+			}
+		}
+		return
+	}
+	if m.review != nil || x >= m.hit.x3 {
+		return // neither the review nor the detail column holds rows to land on
+	}
+	hits := m.hit.first
+	if x >= m.hit.x2 {
+		hits = m.hit.mid
+	}
+	if line := y - bodyTop; line >= 0 && line < len(hits) && hits[line] >= 0 {
+		m.cursor = hits[line]
+		m.clear()
+		m.mark()
+	}
 }
 
 func (m *model) key(msg tea.KeyMsg) tea.Cmd {
@@ -435,7 +589,7 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		switch msg.String() {
 		case "enter":
 			return m.save()
-		case "esc", "q":
+		case "esc", "q", "shift+tab":
 			return m.back()
 		}
 		return nil // the review is the last step: tab has nowhere forward to go
@@ -446,6 +600,8 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		return m.back()
 	case "tab":
 		m.setStep(min(m.step+1, tabChanges))
+	case "shift+tab":
+		m.setStep(max(m.step-1, tabSkills)) // tab doesn't wrap; this is the way back
 	case "up", "k":
 		m.move(-1)
 	case "down", "j":
@@ -463,8 +619,8 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 	case "/":
 		m.typing = true
 	case "p":
-		m.status = "pulling..."
-		return pull(m.cfg.Repo)
+		m.status = "pulling"
+		return m.work("origin", pull(m.cfg.Repo))
 	case "s":
 		m.openReview()
 	case "enter":
@@ -477,6 +633,8 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+// openReview builds the plan. It walks the agent folders rather than the repo's
+// history, which measures in single milliseconds, so it stays on the key path.
 func (m *model) openReview() {
 	var buf bytes.Buffer
 	if err := apply(m.cfg, &buf, true); err != nil {
@@ -506,6 +664,7 @@ func (m *model) save() tea.Cmd {
 		return nil
 	}
 	m.review, m.dirty, m.asked = nil, false, false
+	m.savedOn, m.savedTargets = slices.Clone(m.cfg.Enabled), slices.Clone(m.cfg.Targets)
 	m.status = fmt.Sprintf("applied: %d changes", len(lines(buf.String())))
 	m.build()
 	return nil
@@ -516,7 +675,7 @@ func (m *model) toggle() {
 	if !ok {
 		return
 	}
-	m.cascade, m.asked = "", false
+	m.clear()
 	switch r.kind {
 	case rowTarget:
 		if i := slices.Index(m.cfg.Targets, r.name); i >= 0 {
@@ -525,18 +684,62 @@ func (m *model) toggle() {
 		} else {
 			m.cfg.Targets = append(m.cfg.Targets, r.name)
 		}
-		m.dirty = true
 	case rowSource:
 		m.toggleSource(r.name)
 	case rowSkill:
-		m.toggleSkill(r.name)
+		if !m.toggleSkill(r.name) {
+			return // nothing changed: the line already says why not
+		}
 	default:
 		return // headers and foreign entries aren't ours to change, and clear nothing
 	}
+	// the whole pending state first, so a second toggle can't leave the line
+	// describing only the first, then what this one dragged along
+	pending := m.pending()
+	switch {
+	case pending == "":
+	case m.cascade == "":
+		m.cascade = pending
+	default:
+		m.cascade = pending + " — " + m.cascade
+	}
+	m.dirty = pending != "" // a skill turned on and off again leaves nothing to save
 	m.build()
 }
 
-func (m *model) toggleSkill(name string) {
+// pending is everything a save would change, measured against the selection as
+// it was last written rather than against the last keypress.
+func (m *model) pending() string {
+	var parts []string
+	if n := extra(m.cfg.Enabled, m.savedOn); n > 0 {
+		parts = append(parts, plural(n, "skill")+" on")
+	}
+	if n := extra(m.savedOn, m.cfg.Enabled); n > 0 {
+		parts = append(parts, plural(n, "skill")+" off")
+	}
+	if n := extra(m.cfg.Targets, m.savedTargets) + extra(m.savedTargets, m.cfg.Targets); n > 0 {
+		parts = append(parts, plural(n, "target")+" changed")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "pending: " + strings.Join(parts, ", ")
+}
+
+// extra is how many of a are not in b.
+func extra(a, b []string) int {
+	n := 0
+	for _, s := range a {
+		if !slices.Contains(b, s) {
+			n++
+		}
+	}
+	return n
+}
+
+// toggleSkill flips one skill with everything that hangs off it, and reports
+// whether anything actually changed.
+func (m *model) toggleSkill(name string) bool {
 	skillsDir := filepath.Join(m.cfg.Repo, "skills")
 	if slices.Contains(m.cfg.Enabled, name) {
 		var drop []string
@@ -550,18 +753,16 @@ func (m *model) toggleSkill(name string) {
 				}
 			}
 		}
-		m.cascade = "off: " + name
 		if len(also) > 0 {
 			slices.Sort(also)
-			m.cascade += " — also off, they require it: " + strings.Join(also, ", ")
+			m.cascade = name + " off — also off, they require it: " + strings.Join(also, ", ")
 		}
-		m.dirty = true
-		return
+		return true
 	}
 	var want []string
 	if err := withRequires(name, m.deps, skillsDir, &want); err != nil {
 		m.cascade = "can't enable " + name + ": " + err.Error()
-		return // nothing changed, so earlier changes stay unsaved
+		return false // nothing changed, so earlier changes stay unsaved
 	}
 	var also []string
 	for _, n := range want {
@@ -572,11 +773,11 @@ func (m *model) toggleSkill(name string) {
 			}
 		}
 	}
-	m.cascade, m.dirty = "on: "+name, true
 	if len(also) > 0 {
 		slices.Sort(also)
-		m.cascade += " — also on, it requires them: " + strings.Join(also, ", ")
+		m.cascade = name + " on — also on, it requires them: " + strings.Join(also, ", ")
 	}
+	return true
 }
 
 func (m *model) toggleSource(src string) {
@@ -594,18 +795,16 @@ func (m *model) toggleSource(src string) {
 			break
 		}
 	}
-	var touched []string
 	for _, s := range skills {
 		if allOn == slices.Contains(m.cfg.Enabled, s) {
 			m.toggleSkill(s)
-			touched = append(touched, s)
 		}
 	}
 	verb := "on"
 	if allOn {
 		verb = "off"
 	}
-	m.cascade = fmt.Sprintf("%s %s: %d skills", src, verb, len(touched))
+	m.cascade = src + " " + verb // the counts ride on the pending half of the line
 }
 
 func (m *model) sourceSkills(src string) []string {
@@ -639,6 +838,8 @@ func lines(s string) []string {
 }
 
 // descriptionOf reads the skill's own description out of its frontmatter.
+// shortcut: one small cached file read, still on the draw path; make it a command
+// like patchesFor if a source ever holds enough skills for it to show.
 func (m *model) descriptionOf(name string) string {
 	if d, ok := m.desc[name]; ok {
 		return d
@@ -677,17 +878,4 @@ func blockValue(rows []string) string {
 		parts = append(parts, strings.TrimSpace(row))
 	}
 	return strings.Join(parts, " ")
-}
-
-// patchesFor lists this repo's own commits against the skill, by the patch( convention.
-func (m *model) patchesFor(name string) []string {
-	if p, ok := m.patches[name]; ok {
-		return p
-	}
-	m.patches[name] = nil
-	out, err := git(m.cfg.Repo, "log", "--oneline", "--grep", "^patch", "--", filepath.Join("skills", name))
-	if err == nil {
-		m.patches[name] = lines(out)
-	}
-	return m.patches[name]
 }
