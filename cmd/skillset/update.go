@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -18,8 +19,6 @@ const latestReleaseAPI = "https://api.github.com/repos/dhruvsaxena1998/skills/re
 var httpClient = &http.Client{Timeout: 5 * time.Minute}
 
 // updateCmd replaces the running binary with the latest release build for this platform.
-// shortcut: it downloads every time, even when the binary is already current; stamp the
-// tag into the build with -ldflags and compare first if that download starts to hurt.
 func updateCmd(args []string, out io.Writer) error {
 	if len(args) > 0 {
 		return errors.New("usage: skillset update")
@@ -39,6 +38,15 @@ func update(api, exe string, out io.Writer) error {
 	tag, url, err := latestRelease(api)
 	if err != nil {
 		return err
+	}
+	switch v := binaryVersion(); {
+	case strings.HasPrefix(v, "dev"):
+		// A build nobody released has no version to compare, so it always takes the latest.
+		fmt.Fprintf(out, "this binary is %s, not a release: taking the latest\n", v)
+	// The one place the tag's v is taken off: -X may stamp the version with it or without.
+	case strings.TrimPrefix(v, "v") == strings.TrimPrefix(tag, "v"):
+		fmt.Fprintf(out, "skillset %s is already the latest release\n", tag)
+		return nil
 	}
 	fmt.Fprintf(os.Stderr, "downloading skillset %s from %s\n", tag, url)
 	// A meter redrawing itself with \r is noise in a log file, so only draw one on a terminal.

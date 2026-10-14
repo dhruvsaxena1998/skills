@@ -47,7 +47,16 @@ func installed(t *testing.T, body string) string {
 
 func thisPlatform() string { return "skillset_" + runtime.GOOS + "_" + runtime.GOARCH }
 
+// running pretends the binary was stamped with this version by the linker.
+func running(t *testing.T, v string) {
+	t.Helper()
+	was := version
+	version = v
+	t.Cleanup(func() { version = was })
+}
+
 func TestUpdateReplacesTheBinaryWithTheLatestBuildForThisPlatform(t *testing.T) {
+	running(t, "v1.0.0")
 	api := releaseServer(t, thisPlatform(), "new binary", http.StatusOK)
 	exe := installed(t, "old binary")
 	out := &bytes.Buffer{}
@@ -71,6 +80,54 @@ func TestUpdateReplacesTheBinaryWithTheLatestBuildForThisPlatform(t *testing.T) 
 	}
 }
 
+func TestUpdateDownloadsNothingWhenTheLatestReleaseIsAlreadyInstalled(t *testing.T) {
+	for _, v := range []string{"v1.2.3", "1.2.3"} {
+		t.Run(v, func(t *testing.T) {
+			running(t, v)
+			api := releaseServer(t, thisPlatform(), "new binary", http.StatusOK)
+			exe := installed(t, "old binary")
+			out := &bytes.Buffer{}
+
+			if err := update(api, exe, out); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := read(t, exe); got != "old binary" {
+				t.Errorf("binary is %q, want it untouched", got)
+			}
+			if !strings.Contains(out.String(), "already the latest") {
+				t.Errorf("output %q does not say the binary is current", out.String())
+			}
+		})
+	}
+}
+
+func TestUpdateReplacesABuildThatWasNeverReleased(t *testing.T) {
+	running(t, "dev (abc1234)")
+	api := releaseServer(t, thisPlatform(), "new binary", http.StatusOK)
+	exe := installed(t, "old binary")
+	out := &bytes.Buffer{}
+
+	if err := update(api, exe, out); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := read(t, exe); got != "new binary" {
+		t.Errorf("binary is %q, want the downloaded one", got)
+	}
+	if !strings.Contains(out.String(), "not a release") {
+		t.Errorf("output %q does not warn that this build is not a release", out.String())
+	}
+}
+
+func TestBinaryVersionDescribesABuildTheLinkerDidNotStamp(t *testing.T) {
+	running(t, "")
+
+	if got := binaryVersion(); !strings.HasPrefix(got, "dev") {
+		t.Errorf("version of an unstamped build is %q, want it to own up to being a dev build", got)
+	}
+}
+
 func TestUpdateReportsAReleaseWithNoBuildForThisPlatform(t *testing.T) {
 	api := releaseServer(t, "skillset_solaris_sparc", "new binary", http.StatusOK)
 	exe := installed(t, "old binary")
@@ -86,6 +143,7 @@ func TestUpdateReportsAReleaseWithNoBuildForThisPlatform(t *testing.T) {
 }
 
 func TestUpdateKeepsTheBinaryWhenTheDownloadFails(t *testing.T) {
+	running(t, "v1.0.0")
 	api := releaseServer(t, thisPlatform(), "", http.StatusInternalServerError)
 	exe := installed(t, "old binary")
 
