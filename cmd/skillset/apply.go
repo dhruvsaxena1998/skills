@@ -11,7 +11,8 @@ import (
 
 // apply makes the agent folders match the selection: enabled skills linked into enabled
 // targets, our links for everything else removed. Entries we didn't create are never touched.
-func apply(cfg *Config, out io.Writer) error {
+// A dry run writes nothing and reports what it would do, which is what the TUI reviews.
+func apply(cfg *Config, out io.Writer, dry bool) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -22,7 +23,7 @@ func apply(cfg *Config, out io.Writer) error {
 	}
 
 	for _, d := range legacyDirs {
-		prune(filepath.Join(home, d), skillsDir, nil, out)
+		prune(filepath.Join(home, d), skillsDir, nil, out, dry)
 	}
 	for _, t := range targets {
 		dir := filepath.Join(home, t.dir)
@@ -31,18 +32,20 @@ func apply(cfg *Config, out io.Writer) error {
 		if !on {
 			enabled = nil // a target that is off keeps neither links nor hooks of ours
 		}
-		prune(dir, skillsDir, enabled, out)
-		if err := syncHooks(filepath.Join(home, t.hooks), cfg.Repo, enabled, out); err != nil {
+		prune(dir, skillsDir, enabled, out, dry)
+		if err := syncHooks(filepath.Join(home, t.hooks), cfg.Repo, enabled, out, dry); err != nil {
 			return err
 		}
 		if !on {
 			continue
 		}
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
+		if !dry {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
 		}
 		for _, name := range cfg.Enabled {
-			if err := link(dir, skillsDir, name, out); err != nil {
+			if err := link(dir, skillsDir, name, out, dry); err != nil {
 				return err
 			}
 		}
@@ -52,7 +55,7 @@ func apply(cfg *Config, out io.Writer) error {
 
 // prune removes links in dir that point into skillsDir unless they are a correct link
 // for a kept skill. Links pointing anywhere else, and real files, are left alone.
-func prune(dir, skillsDir string, keep []string, out io.Writer) {
+func prune(dir, skillsDir string, keep []string, out io.Writer, dry bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -67,6 +70,10 @@ func prune(dir, skillsDir string, keep []string, out io.Writer) {
 		if slices.Contains(keep, name) && samePath(dest, filepath.Join(skillsDir, name)) && isSkill(skillsDir, name) {
 			continue
 		}
+		if dry {
+			fmt.Fprintf(out, "unlink %s\n", path)
+			continue
+		}
 		if err := os.Remove(path); err != nil {
 			fmt.Fprintf(out, "could not remove %s: %v\n", path, err)
 			continue
@@ -75,7 +82,7 @@ func prune(dir, skillsDir string, keep []string, out io.Writer) {
 	}
 }
 
-func link(dir, skillsDir, name string, out io.Writer) error {
+func link(dir, skillsDir, name string, out io.Writer, dry bool) error {
 	dest := filepath.Join(skillsDir, name)
 	if !isSkill(skillsDir, name) {
 		fmt.Fprintf(out, "skip %s: not in the repo\n", name)
@@ -87,6 +94,10 @@ func link(dir, skillsDir, name string, out io.Writer) error {
 	}
 	if _, err := os.Lstat(path); err == nil {
 		fmt.Fprintf(out, "skip %s: exists and isn't from this repo\n", path)
+		return nil
+	}
+	if dry {
+		fmt.Fprintf(out, "link %s\n", path)
 		return nil
 	}
 	kind, err := createLink(dest, path)

@@ -54,7 +54,7 @@ func repoHooks(repo string, enabled []string) (hookEvents, error) {
 // syncHooks makes one agent's hook config match the selection. Our entries go after the
 // other tools' ones (Codex keys hook trust by position) and are found again by their path
 // into the repo. The file is backed up before it is written, and only written when it changes.
-func syncHooks(path, repo string, enabled []string, out io.Writer) error {
+func syncHooks(path, repo string, enabled []string, out io.Writer, dry bool) error {
 	ours, err := repoHooks(repo, enabled)
 	if err != nil {
 		return err
@@ -110,6 +110,10 @@ func syncHooks(path, repo string, enabled []string, out io.Writer) error {
 		return err
 	}
 	if bytes.Equal(before, after) {
+		return nil
+	}
+	if dry {
+		fmt.Fprintf(out, "update hooks in %s\n", path)
 		return nil
 	}
 	pretty, err := json.MarshalIndent(doc, "", "  ")

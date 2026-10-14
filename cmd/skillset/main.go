@@ -10,6 +10,7 @@ import (
 
 const usage = `skillset links this repo's skills into your agent folders.
 
+  skillset                 open the selection screen
   skillset init [path]     remember the skills clone (clones one if there is none)
   skillset enable <skill>  turn a skill on here, with what it requires
   skillset disable <skill> turn it off, with the skills that require it
@@ -48,7 +49,7 @@ func run(args []string, out io.Writer, in io.Reader) error {
 		if err != nil {
 			return err
 		}
-		if err := apply(cfg, out); err != nil {
+		if err := apply(cfg, out, false); err != nil {
 			return err
 		}
 		for _, w := range warnings(cfg, deps) {
@@ -57,7 +58,9 @@ func run(args []string, out io.Writer, in io.Reader) error {
 		return nil
 	case "update":
 		return updateCmd(args[1:], out)
-	case "", "help", "-h", "--help":
+	case "":
+		return tuiCmd()
+	case "help", "-h", "--help":
 		fmt.Fprint(out, usage)
 		return nil
 	default:
