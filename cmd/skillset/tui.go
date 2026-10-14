@@ -73,6 +73,7 @@ type model struct {
 	popBody []string // its lines, the first of them its heading
 	popTop  int      // the first of those on screen
 	query   string   // the keys overlay's search box
+	setAt   int      // the settings row the overlay's cursor is on, len(settings) for the list
 
 	desc    map[string]string   // skill -> description, read on demand
 	patches map[string][]string // skill -> local patch commits, loaded off the draw

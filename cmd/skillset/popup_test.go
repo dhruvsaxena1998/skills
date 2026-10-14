@@ -187,8 +187,8 @@ func TestSettingsRowChangesUnderTheCursor(t *testing.T) {
 	defer useTheme(defaultTheme)
 	m, _, _ := tuiModel(t)
 	press(m, "?")
-	if settingAt != 0 {
-		t.Fatalf("the overlay opened with the cursor at %d, want it on the first setting", settingAt)
+	if m.setAt != 0 {
+		t.Fatalf("the overlay opened with the cursor at %d, want it on the first setting", m.setAt)
 	}
 
 	names := themeNames()
@@ -235,8 +235,8 @@ func TestSettingsCursorStepsIntoTheKeyList(t *testing.T) {
 	press(m, "?")
 
 	tap(m, tea.KeyDown)
-	if settingAt != len(settings) {
-		t.Fatalf("settingAt = %d after one ↓, want the cursor off the settings and on the list", settingAt)
+	if m.setAt != len(settings) {
+		t.Fatalf("m.setAt = %d after one ↓, want the cursor off the settings and on the list", m.setAt)
 	}
 	tap(m, tea.KeyDown)
 	if m.popTop != 1 {
@@ -244,17 +244,17 @@ func TestSettingsCursorStepsIntoTheKeyList(t *testing.T) {
 	}
 	tap(m, tea.KeyUp)
 	tap(m, tea.KeyUp)
-	if settingAt != 0 || m.popTop != 0 {
-		t.Fatalf("settingAt = %d popTop = %d, want ↑ back to the top of the list and then onto the setting", settingAt, m.popTop)
+	if m.setAt != 0 || m.popTop != 0 {
+		t.Fatalf("m.setAt = %d popTop = %d, want ↑ back to the top of the list and then onto the setting", m.setAt, m.popTop)
 	}
 
 	press(m, "tab")
-	if settingAt != len(settings) {
-		t.Fatalf("tab left the cursor at %d, want it on the list", settingAt)
+	if m.setAt != len(settings) {
+		t.Fatalf("tab left the cursor at %d, want it on the list", m.setAt)
 	}
 	press(m, "tab")
-	if settingAt != 0 {
-		t.Fatalf("tab left the cursor at %d, want it round to the first setting", settingAt)
+	if m.setAt != 0 {
+		t.Fatalf("tab left the cursor at %d, want it round to the first setting", m.setAt)
 	}
 	press(m, " ") // nothing to change while the cursor is on the list is not a panic
 	tap(m, tea.KeyDown)

@@ -34,6 +34,7 @@ var bindings = []binding{
 	{"selection", "p", "pull the repo", "p pull"},
 	{"selection", "esc · q", "go back one: the filter, then the step, then quit (asking once when something is unsaved)", "esc back"},
 	{"selection", "ctrl+c", "quit at once", ""},
+	{"selection", "mouse", "click a row or a tab to go to it; the wheel scrolls the column under the pointer", ""},
 
 	{"filtering", "space", "toggle the row under the cursor", "space toggles"},
 	{"filtering", "↑ ↓", "move the cursor without leaving the filter", "↑↓ move"},
@@ -42,14 +43,14 @@ var bindings = []binding{
 	{"filtering", "letters", "text, q included, so a skill with a q in it is searchable", ""},
 
 	{"review", "enter", "apply the plan", "enter applies this"},
-	{"review", "esc · q", "go back", "esc goes back"},
+	{"review", "esc · q · shift+tab", "go back", "esc goes back"},
 
 	{"overlay", "↑ ↓ · tab", "move between the settings and the key list, which scrolls", "↑↓ move"},
 	// not on the rail: the settings carry their own keys, and a SKILL.md shares
 	// this rail line without having any of them
 	{"overlay", "space · ←→", "change the setting under the cursor, enter too", ""},
 	{"overlay", "1 … 9", "pick that theme straight off, written as you press it", ""},
-	{"overlay", "k j", "scroll a SKILL.md, where letters are not a search", ""},
+	{"overlay", "k j · wheel", "scroll a SKILL.md, where letters are not a search", ""},
 	{"overlay", "esc · q", "clear the search, then close it where you were; in this list q is text, so only esc", "esc goes back"},
 }
 
@@ -89,24 +90,24 @@ func (m *model) popKey(msg tea.KeyMsg) {
 		m.pop, m.popBody, m.popTop, m.query = "", nil, 0, ""
 		return
 	case key == "tab":
-		settingAt = (settingAt + 1) % (len(settings) + 1)
+		m.setAt = (m.setAt + 1) % (len(settings) + 1)
 	case key == "up":
-		if settingAt == len(settings) && m.popTop > 0 {
+		if m.setAt == len(settings) && m.popTop > 0 {
 			m.popTop--
 		} else {
-			settingAt = max(settingAt-1, 0)
+			m.setAt = max(m.setAt-1, 0)
 		}
 	case key == "down":
-		if settingAt == len(settings) {
+		if m.setAt == len(settings) {
 			m.popTop++
 		} else {
-			settingAt++
+			m.setAt++
 		}
 	case key == "left":
 		m.stepSetting(-1)
 	// enter and the arrows are never text; space is, once you are searching or
 	// the cursor has left the settings for the list
-	case key == "right", key == "enter", key == " " && m.query == "" && settingAt < len(settings):
+	case key == "right", key == "enter", key == " " && m.query == "" && m.setAt < len(settings):
 		m.stepSetting(1)
 	// no key in the table is written with a digit, so digits stay free for the
 	// themes. Every letter, q included, is a character in the search box.
@@ -123,7 +124,7 @@ func (m *model) popKey(msg tea.KeyMsg) {
 		m.query += string(msg.Runes)
 		m.popTop = 0
 	}
-	if settingAt < len(settings) {
+	if m.setAt < len(settings) {
 		m.popTop = 0 // a cursor you cannot see is worse than losing your place
 	}
 	m.popBody = m.keysBody()
@@ -133,18 +134,14 @@ func (m *model) popKey(msg tea.KeyMsg) {
 // stops one past the end, on the key list, which is where it scrolls.
 var settings = []string{"theme"}
 
-// settingAt is the row the cursor is on. It lives beside the list because the
-// overlay is the only thing that reads it.
-var settingAt int
-
 // stepSetting moves the focused setting n places along its options, wrapping,
 // and writes it: a setting is this machine's look, not part of the selection
 // that the review flow saves.
 func (m *model) stepSetting(n int) {
-	if settingAt >= len(settings) {
+	if m.setAt >= len(settings) {
 		return // the cursor is on the key list, which has nothing to change
 	}
-	switch settings[settingAt] {
+	switch settings[m.setAt] {
 	case "theme":
 		names := themeNames()
 		m.setTheme(names[(slices.Index(names, m.themeName())+n+len(names))%len(names)])
@@ -181,7 +178,7 @@ func (m *model) themeName() string {
 }
 
 func (m *model) openKeys() {
-	m.pop, m.popTop, m.query, settingAt = "keys", 0, "", 0
+	m.pop, m.popTop, m.query, m.setAt = "keys", 0, "", 0
 	m.popBody = m.keysBody()
 }
 
@@ -219,7 +216,7 @@ func (m *model) keysBody() []string {
 // its name, then its options with the one in force filled in.
 func (m *model) settingRow(i int) string {
 	cursor := "  "
-	if i == settingAt {
+	if i == m.setAt {
 		cursor = ui.bar.Render(" ") + " "
 	}
 	opts := ""
