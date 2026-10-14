@@ -17,6 +17,7 @@ scripts/link.sh          symlink skills into agent directories
 | Source       | Upstream                                                                 | Branch              |
 | ------------ | ------------------------------------------------------------------------ | ------------------- |
 | `mattpocock` | [mattpocock/skills](https://github.com/mattpocock/skills)                | `vendor/mattpocock` |
+| `pstack`     | [cursor/plugins › pstack](https://github.com/cursor/plugins/tree/main/pstack) | `vendor/pstack`     |
 
 ## How upstream sync works
 
@@ -33,6 +34,21 @@ See what I've changed relative to upstream:
 ```sh
 git diff vendor/mattpocock main -- skills/tdd
 ```
+
+## Patches
+
+My edits to upstream skills, each in its own `patch` commit. List them with `git log --oneline --grep '^patch'`.
+
+| Skill | Change | Why |
+| ----- | ------ | --- |
+| `unslop` | Dropped `disable-model-invocation`; the description says when to apply it | Agents run it on their own when writing prose |
+| `pr` | Prose goes through `unslop`; **Blast Radius** is filled by following `blast-radius` | Combine Matt's PR template with pstack's writing and risk checks |
+| `blast-radius` | Removed `arena`/`how`/`why` steps; pulls PRs with `gh` or MRs with `glab` | Those pstack skills only work in Cursor; support GitHub and GitLab |
+| `to-spec`, `to-tickets`, `to-questionnaire`, `research`, `domain-modeling`, `handoff`, `technical-writing` | Write their output through `unslop` | Consistent, plain prose in every artifact |
+| `typescript-best-practices` | Dropped `disable-model-invocation`; principles linked by path | Applies automatically when editing `.ts` |
+| `tdd` | Added "When not to add a test" from pstack's `tdd` | Prefer no test over a bad test |
+
+Skills reference each other by relative path (`../unslop/SKILL.md`), not by name, because most pstack skills set `disable-model-invocation` and can't be called through the Skill tool.
 
 ## Add or remove a skill
 
