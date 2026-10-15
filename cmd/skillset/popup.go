@@ -32,6 +32,8 @@ var bindings = []binding{
 	{"selection", "?", "the settings and this list", "? keys"},
 	{"selection", "s", "review what a save would change", "s review"},
 	{"selection", "p", "pull the repo", "p pull"},
+	{"selection", "u", "sync the source under the cursor from its upstream", "u sync"},
+	{"selection", "U", "sync every source from its upstream", ""},
 	{"selection", "esc · q", "go back one: the filter, then the step, then quit (asking once when something is unsaved)", "esc back"},
 	{"selection", "ctrl+c", "quit at once", ""},
 	{"selection", "mouse", "click a row or a tab to go to it; the wheel scrolls the column under the pointer", ""},

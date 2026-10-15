@@ -460,6 +460,22 @@ func pull(repo string) tea.Cmd {
 	}
 }
 
+// syncing runs `skillset sync` for each source in turn and reports the first line
+// of each. It stops at the first failure, which is usually a conflict to resolve.
+func syncing(repo string, names []string) tea.Cmd {
+	return func() tea.Msg {
+		var done []string
+		for _, name := range names {
+			var buf bytes.Buffer
+			if err := syncSource(repo, name, &buf); err != nil {
+				return gitMsg(name + ": " + strings.SplitN(err.Error(), "\n", 2)[0])
+			}
+			done = append(done, strings.SplitN(buf.String(), "\n", 2)[0])
+		}
+		return gitMsg(strings.Join(done, " · "))
+	}
+}
+
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
@@ -622,6 +638,24 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 	case "p":
 		m.status = "pulling"
 		return m.work("origin", pull(m.cfg.Repo))
+	case "u":
+		r, ok := m.at()
+		if !ok || stepOf(r.kind) != tabSkills {
+			return nil
+		}
+		src := r.name
+		if r.kind == rowSkill {
+			src = r.src
+		}
+		if _, listed := m.sources[src]; !listed {
+			m.status = src + " has no upstream to sync"
+			return nil
+		}
+		m.status = "syncing " + src
+		return m.work("origin", syncing(m.cfg.Repo, []string{src}))
+	case "U":
+		m.status = "syncing every source"
+		return m.work("origin", syncing(m.cfg.Repo, slices.Sorted(maps.Keys(m.sources))))
 	case "s":
 		m.openReview()
 	case "enter":

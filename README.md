@@ -121,9 +121,10 @@ in what the skill requires, disabling unchecks the skills that require it, and a
 without one of its optional dependencies keeps a warning on screen.
 
 `space` toggles, `/` filters, `enter` on a skill reads its SKILL.md, `s` reviews every link, unlink and hook change the selection
-would write, `enter` on that review saves and applies it, `p` pulls the repo, `q` quits.
-`?` opens the full key list and the settings. Nothing is written until the review is saved,
-and the screen's only git action is `git pull --ff-only`. It never commits or pushes.
+would write, `enter` on that review saves and applies it, `p` pulls the repo, `u` runs
+`skillset sync` for the source under the cursor and `U` for every source, `q` quits.
+`?` opens the full key list and the settings. Nothing is written until the review is saved.
+The screen's git actions are `git pull --ff-only` and sync's vendor commit and merge. It never pushes.
 
 ## Commands
 

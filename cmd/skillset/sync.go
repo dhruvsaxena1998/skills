@@ -18,12 +18,15 @@ func syncCmd(args []string, out io.Writer) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: skillset sync <source>")
 	}
-	name := args[0]
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
-	root := cfg.Repo
+	return syncSource(cfg.Repo, args[0], out)
+}
+
+// syncSource is the whole sync of one source into the clone at root.
+func syncSource(root, name string, out io.Writer) error {
 	sources, err := loadSources(root)
 	if err != nil {
 		return err
