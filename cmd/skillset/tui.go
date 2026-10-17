@@ -612,7 +612,11 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		return nil // the review is the last step: tab has nowhere forward to go
 	}
 
-	switch msg.String() {
+	key := msg.String()
+	if m.loading["origin"] && (key == "p" || key == "u" || key == "U") {
+		return nil // one git job at a time; the status line names the one running
+	}
+	switch key {
 	case "esc", "q":
 		return m.back()
 	case "tab":

@@ -213,6 +213,23 @@ func TestTUIShiftUSyncsEverySource(t *testing.T) {
 	}
 }
 
+func TestTUIGitKeysWaitForTheRunningJob(t *testing.T) {
+	m, _ := syncModel(t)
+	goTo(t, m, "demo")
+	for _, key := range []string{"p", "u", "U"} {
+		m.loading["origin"] = true
+		m.status = "checking origin"
+		if cmd := press(m, key); cmd != nil || m.status != "checking origin" {
+			t.Fatalf("%s mid-job: cmd = %v, status = %q, want nil and the running job kept", key, cmd != nil, m.status)
+		}
+		m.Update(gitMsg("done"))
+		goTo(t, m, "demo")
+		if press(m, key) == nil {
+			t.Fatalf("%s after the job: got no command", key)
+		}
+	}
+}
+
 func TestTUISyncRefusesADirtyCloneOnTheStatusLine(t *testing.T) {
 	m, local := syncModel(t)
 	write(t, filepath.Join(local, "sources.json"), read(t, filepath.Join(local, "sources.json"))+"\n")
