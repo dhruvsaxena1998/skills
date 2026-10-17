@@ -58,7 +58,7 @@
     ],
     "deps": {
       "arena": {},
-      "blast-radius": { "optional": ["unslop"] },
+      "blast-radius": { "optional": ["arena", "how", "unslop", "why"] },
       "correct": {},
       "how": {},
       "principle-boundary-discipline": {},
