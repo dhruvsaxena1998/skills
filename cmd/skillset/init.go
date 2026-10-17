@@ -116,7 +116,7 @@ func offerClone(out io.Writer, in io.Reader) (string, error) {
 		return "", errNotSetUp
 	case "":
 	default:
-		if def, err = filepath.Abs(answer); err != nil {
+		if def, err = filepath.Abs(expandHome(answer, home)); err != nil {
 			return "", err
 		}
 	}
@@ -126,4 +126,16 @@ func offerClone(out io.Writer, in io.Reader) (string, error) {
 		return "", fmt.Errorf("clone into %s: %w", def, err)
 	}
 	return def, nil
+}
+
+// expandHome replaces a leading ~ with home, because Go does not expand it the way a
+// shell does. ~user is left alone. os.IsPathSeparator also accepts ~\ on Windows.
+func expandHome(answer, home string) string {
+	if answer == "~" {
+		return home
+	}
+	if len(answer) > 1 && answer[0] == '~' && os.IsPathSeparator(answer[1]) {
+		return filepath.Join(home, answer[2:])
+	}
+	return answer
 }
