@@ -124,6 +124,27 @@ func TestInitOutsideCloneRefusesWithoutAnAnswer(t *testing.T) {
 	}
 }
 
+func TestExpandHome(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	abs := filepath.Join(t.TempDir(), "x")
+	cases := map[string]string{
+		"~":       home,
+		"~/a/b":   filepath.Join(home, "a", "b"),
+		"~user/x": "~user/x",
+		"a/~/b":   "a/~/b",
+		"a/b":     "a/b",
+		abs:       abs,
+	}
+	if runtime.GOOS == "windows" {
+		cases[`~\a`] = filepath.Join(home, "a")
+	}
+	for in, want := range cases {
+		if got := expandHome(in, home); got != want {
+			t.Errorf("expandHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestInitAdoptsSkillsAlreadyLinked(t *testing.T) {
 	home, repo := setup(t, "a", "b")
 	symlink(t, filepath.Join(repo, "skills", "a"), filepath.Join(home, ".claude", "skills", "a"))
