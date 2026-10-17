@@ -204,6 +204,7 @@ My edits to upstream skills, each in its own `patch` commit. List them with
 | `typescript-best-practices`                                                                                | Dropped `disable-model-invocation`; principles linked by path                       | Applies automatically when editing `.ts`                           |
 | `tdd`                                                                                                      | Added "When not to add a test" from pstack's `tdd`                                  | Prefer no test over a bad test                                     |
 | `to-spec`, `to-tickets`, `implement-spec` | Without `/setup-matt-pocock-skills`, default to untracked local markdown in `.scratch/` (excluded via `.git/info/exclude`); GitHub, GitLab or tracked markdown only when asked | They work in any repo without a setup step or touching tracked files |
+| `arena`, `how`, `why` | Subagents run as `claude:opus/sonnet/haiku` or `codex:sol/terra/luna` seats instead of Cursor models; MCPs found from the session's tools | Run in Claude Code, mixing Claude and Codex models |
 
 Skills reference each other by relative path (`../unslop/SKILL.md`), not by name, because
 most pstack skills set `disable-model-invocation` and can't be called through the Skill
