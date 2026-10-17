@@ -45,22 +45,28 @@
     "ref": "main",
     "path": "pstack/skills",
     "skills": [
+      "arena",
       "blast-radius",
       "correct",
+      "how",
       "principle-boundary-discipline",
       "principle-type-system-discipline",
       "technical-writing",
       "typescript-best-practices",
-      "unslop"
+      "unslop",
+      "why"
     ],
     "deps": {
+      "arena": {},
       "blast-radius": { "optional": ["unslop"] },
       "correct": {},
+      "how": {},
       "principle-boundary-discipline": {},
       "principle-type-system-discipline": { "requires": ["principle-boundary-discipline"] },
       "technical-writing": { "optional": ["unslop"] },
       "typescript-best-practices": { "requires": ["principle-boundary-discipline", "principle-type-system-discipline"] },
-      "unslop": {}
+      "unslop": {},
+      "why": {}
     }
   },
   "ponytail": {
