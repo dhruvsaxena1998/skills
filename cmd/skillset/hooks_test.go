@@ -249,3 +249,51 @@ func TestNoHookFileForAnAgentThatIsNotInstalled(t *testing.T) {
 		t.Fatalf("output = %q, want it to say the agent isn't here", out)
 	}
 }
+
+func TestInitDropsTheOldClonesHooksWhenTheCloneMoves(t *testing.T) {
+	home, repo := hooksRepo(t)
+	claude := filepath.Join(home, ".claude", "settings.json")
+	write(t, claude, foreign)
+	save(t, &Config{Repo: repo, Targets: []string{"claude", "agents"}, Enabled: []string{"ponytail"}, Seen: []string{"ponytail", "other"}})
+	skillset(t, "apply")
+	moved := filepath.Join(filepath.Dir(repo), "moved-clone")
+	if err := os.Rename(repo, moved); err != nil { // the old folder is gone after this
+		t.Fatal(err)
+	}
+
+	skillset(t, "init", moved)
+	skillset(t, "apply")
+
+	root := filepath.ToSlash(moved)
+	wantCommands(t, claude, map[string][]string{
+		"SessionStart":     {"first-tool", "second-tool", "node \"" + root + "/hooks/ponytail-activate.js\""},
+		"UserPromptSubmit": {"node \"" + root + "/hooks/ponytail-mode-tracker.js\""},
+	})
+
+	// init again with the same path: nothing to clean, so no write and no backup
+	if err := os.Remove(claude + ".bak"); err != nil {
+		t.Fatal(err)
+	}
+	if out := skillset(t, "init", moved); strings.Contains(out, "hooks updated") {
+		t.Fatalf("init said %q, want no agent config touched", out)
+	}
+	if _, err := os.Stat(claude + ".bak"); err == nil {
+		t.Fatal("re-init with the same path wrote a backup")
+	}
+}
+
+func TestInitWarnsAboutAHookConfigItCannotParseAndStillMoves(t *testing.T) {
+	home, repo := hooksRepo(t)
+	write(t, filepath.Join(home, ".claude", "settings.json"), `{"hooks": []}`)
+	save(t, &Config{Repo: "/old/clone", Targets: []string{"claude"}, Seen: []string{"ponytail", "other"}})
+
+	out := skillset(t, "init", repo)
+
+	if !strings.Contains(out, "warning:") || !strings.Contains(out, "settings.json") {
+		t.Fatalf("output = %q, want a warning naming the file", out)
+	}
+	cfg, err := loadConfig()
+	if err != nil || cfg.Repo != repo {
+		t.Fatalf("repo = %v (%v), want %s saved", cfg, err, repo)
+	}
+}
