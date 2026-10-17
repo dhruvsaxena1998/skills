@@ -180,6 +180,29 @@ func TestKeysOverlayPicksAThemeAndWritesIt(t *testing.T) {
 	}
 }
 
+// TestThemePickKeepsUnsavedTogglesOffDisk: picking a theme used to write the
+// whole config, so q q after it left a discarded toggle enabled on disk.
+func TestThemePickKeepsUnsavedTogglesOffDisk(t *testing.T) {
+	defer useTheme(defaultTheme)
+	m, _, _ := tuiModel(t)
+	goTo(t, m, "nice")
+	press(m, " ")
+	press(m, "?")
+	want := themeNames()[1]
+	press(m, "2")
+
+	cfg, err := loadConfig()
+	if err != nil || cfg.Theme != want {
+		t.Fatalf("the config on disk says %q (%v), want %q", cfg.Theme, err, want)
+	}
+	if len(cfg.Enabled) != 0 || !slices.Equal(cfg.Targets, []string{"claude"}) {
+		t.Fatalf("disk has enabled %v and targets %v, want the last saved [] and [claude]", cfg.Enabled, cfg.Targets)
+	}
+	if !m.dirty || !slices.Contains(m.cfg.Enabled, "nice") || len(m.savedOn) != 0 {
+		t.Fatal("the toggle should still be pending after a theme pick")
+	}
+}
+
 // TestSettingsRowChangesUnderTheCursor: the overlay used to be the one screen
 // with its own interaction model. The setting under the cursor now moves on
 // space, enter and the arrows, like every other row in the app.
