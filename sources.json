@@ -24,66 +24,19 @@
     "deps": {
       "codebase-design": {},
       "diagnosing-bugs": {},
-      "domain-modeling": {
-        "optional": [
-          "unslop"
-        ]
-      },
-      "grill-with-docs": {
-        "requires": [
-          "domain-modeling",
-          "grilling"
-        ]
-      },
+      "domain-modeling": { "optional": ["unslop"] },
+      "grill-with-docs": { "requires": ["domain-modeling", "grilling"] },
       "grilling": {},
-      "handoff": {
-        "optional": [
-          "unslop"
-        ]
-      },
-      "implement-spec": {
-        "optional": [
-          "setup-matt-pocock-skills",
-          "tdd"
-        ]
-      },
-      "pr": {
-        "optional": [
-          "blast-radius",
-          "unslop"
-        ]
-      },
+      "handoff": { "optional": ["unslop"] },
+      "implement-spec": { "optional": ["setup-matt-pocock-skills", "tdd"] },
+      "pr": { "optional": ["blast-radius", "unslop"] },
       "prototype": {},
-      "research": {
-        "optional": [
-          "unslop"
-        ]
-      },
+      "research": { "optional": ["unslop"] },
       "setup-matt-pocock-skills": {},
-      "tdd": {
-        "optional": [
-          "codebase-design"
-        ]
-      },
-      "to-questionnaire": {
-        "optional": [
-          "unslop"
-        ]
-      },
-      "to-spec": {
-        "optional": [
-          "prototype",
-          "setup-matt-pocock-skills",
-          "unslop"
-        ]
-      },
-      "to-tickets": {
-        "optional": [
-          "prototype",
-          "setup-matt-pocock-skills",
-          "unslop"
-        ]
-      },
+      "tdd": { "optional": ["codebase-design"] },
+      "to-questionnaire": { "optional": ["unslop"] },
+      "to-spec": { "optional": ["prototype", "setup-matt-pocock-skills", "unslop"] },
+      "to-tickets": { "optional": ["prototype", "setup-matt-pocock-skills", "unslop"] },
       "wait-what": {}
     }
   },
@@ -104,32 +57,15 @@
       "why"
     ],
     "deps": {
-      "blast-radius": {
-        "optional": [
-          "unslop"
-        ]
-      },
-      "correct": {},
-      "principle-boundary-discipline": {},
-      "principle-type-system-discipline": {
-        "requires": [
-          "principle-boundary-discipline"
-        ]
-      },
-      "technical-writing": {
-        "optional": [
-          "unslop"
-        ]
-      },
-      "typescript-best-practices": {
-        "requires": [
-          "principle-boundary-discipline",
-          "principle-type-system-discipline"
-        ]
-      },
-      "unslop": {},
       "arena": {},
+      "blast-radius": { "optional": ["unslop"] },
+      "correct": {},
       "how": {},
+      "principle-boundary-discipline": {},
+      "principle-type-system-discipline": { "requires": ["principle-boundary-discipline"] },
+      "technical-writing": { "optional": ["unslop"] },
+      "typescript-best-practices": { "requires": ["principle-boundary-discipline", "principle-type-system-discipline"] },
+      "unslop": {},
       "why": {}
     }
   },
@@ -152,31 +88,11 @@
     ],
     "deps": {
       "ponytail": {},
-      "ponytail-audit": {
-        "optional": [
-          "ponytail"
-        ]
-      },
-      "ponytail-debt": {
-        "requires": [
-          "ponytail"
-        ]
-      },
-      "ponytail-gain": {
-        "requires": [
-          "ponytail"
-        ]
-      },
-      "ponytail-help": {
-        "requires": [
-          "ponytail"
-        ]
-      },
-      "ponytail-review": {
-        "optional": [
-          "ponytail"
-        ]
-      }
+      "ponytail-audit": { "optional": ["ponytail"] },
+      "ponytail-debt": { "requires": ["ponytail"] },
+      "ponytail-gain": { "requires": ["ponytail"] },
+      "ponytail-help": { "requires": ["ponytail"] },
+      "ponytail-review": { "optional": ["ponytail"] }
     }
   }
 }
