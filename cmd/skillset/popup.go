@@ -160,12 +160,16 @@ func pick(label string, on bool) string {
 	return ui.dim.Render(" "+label+" ") + " "
 }
 
-// setTheme takes effect and is written at once: the theme is this machine's
-// look, not part of the selection that the review flow saves.
+// setTheme takes effect and writes the theme alone at once: the theme is this
+// machine's look, not part of the selection that the review flow saves, so the
+// disk keeps the selection from the last save and unsaved toggles stay pending.
 func (m *model) setTheme(name string) {
 	m.cfg.Theme = name
 	useTheme(name)
-	if err := m.cfg.save(); err != nil {
+	c := *m.cfg
+	// clones, because save sorts in place and must not reorder the saved selection
+	c.Enabled, c.Targets = slices.Clone(m.savedOn), slices.Clone(m.savedTargets)
+	if err := c.save(); err != nil {
 		m.status = err.Error()
 	}
 }
