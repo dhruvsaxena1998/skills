@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // syncRepos builds a throwaway upstream and a throwaway local clone, so sync never
@@ -138,5 +140,90 @@ func TestSyncWarnsAboutALinkMissingFromDeps(t *testing.T) {
 	}
 	if strings.Contains(out, "../beta/") {
 		t.Fatalf("output = %q, want no warning for the declared link", out)
+	}
+}
+
+// syncModel is a screen over the sync harness's clone, before anything is synced.
+func syncModel(t *testing.T) (*model, string) {
+	t.Helper()
+	local, _ := syncRepos(t, "# alpha")
+	m, err := newModel(&Config{Repo: local, Targets: []string{"claude"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m, local
+}
+
+// finish runs the command a key returned and hands its answer back to the screen.
+func finish(t *testing.T, m *model, cmd tea.Cmd) {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("the key started nothing")
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c != nil {
+				if r := c(); r != nil {
+					if _, tick := r.(tickMsg); !tick {
+						msg = r
+					}
+				}
+			}
+		}
+	}
+	m.Update(msg)
+}
+
+func TestTUIUSyncsTheSourceUnderTheCursor(t *testing.T) {
+	m, local := syncModel(t)
+	goTo(t, m, "demo")
+
+	finish(t, m, press(m, "u"))
+
+	if !strings.Contains(m.status, "committed vendor/demo") {
+		t.Fatalf("status = %q, want the vendor commit reported", m.status)
+	}
+	if got := read(t, filepath.Join(local, "skills", "alpha", "SKILL.md")); got != "# alpha" {
+		t.Fatalf("alpha = %q, want it synced", got)
+	}
+	goTo(t, m, "alpha") // the screen re-read the repo, so the new skill has a row
+}
+
+func TestTUIShiftUSyncsEverySource(t *testing.T) {
+	m, local := syncModel(t)
+	sources := read(t, filepath.Join(local, "sources.json"))
+	write(t, filepath.Join(local, "sources.json"), strings.Replace(sources, `{"demo": {`,
+		`{"other": {"repo": "`+m.sources["demo"].Repo+`", "ref": "main", "path": "skills", "skills": ["beta"]}, "demo": {`, 1))
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "--quiet", "-m", "other"}} {
+		if _, err := git(local, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+
+	finish(t, m, press(m, "U"))
+
+	for _, want := range []string{"committed vendor/demo", "committed vendor/other"} {
+		if !strings.Contains(m.status, want) {
+			t.Fatalf("status = %q, want %q", m.status, want)
+		}
+	}
+}
+
+func TestTUISyncRefusesADirtyCloneOnTheStatusLine(t *testing.T) {
+	m, local := syncModel(t)
+	write(t, filepath.Join(local, "sources.json"), read(t, filepath.Join(local, "sources.json"))+"\n")
+	goTo(t, m, "demo")
+
+	finish(t, m, press(m, "u"))
+
+	if !strings.Contains(m.status, "commit or stash") {
+		t.Fatalf("status = %q, want the refusal shown", m.status)
+	}
+	if _, err := os.Stat(filepath.Join(local, "skills", "alpha")); err == nil {
+		t.Fatal("alpha arrived, want nothing synced")
 	}
 }
