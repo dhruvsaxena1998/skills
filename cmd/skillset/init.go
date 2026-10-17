@@ -47,12 +47,22 @@ func initCmd(args []string, out io.Writer, in io.Reader) error {
 	} else if err != nil {
 		return err
 	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	// == rather than samePath: the old entries carry the old spelling exactly, and
+	// ourEntry matches case-sensitively, so any other spelling has to be cleared too
+	if old := cfg.Repo; old != "" && old != repo {
+		for _, t := range targets {
+			path := filepath.Join(home, t.hooks)
+			if err := syncHooks(path, old, nil, out, false); err != nil {
+				fmt.Fprintf(out, "warning: could not drop the old clone's hooks from %s: %v\n", path, err)
+			}
+		}
+	}
 	cfg.Repo = repo
 	if len(cfg.Seen) == 0 {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
 		cfg.Enabled = linkedSkills(home, repo)
 		cfg.Seen = repoSkills(repo)
 		fmt.Fprintf(out, "adopted %d skills already linked on this machine\n", len(cfg.Enabled))
