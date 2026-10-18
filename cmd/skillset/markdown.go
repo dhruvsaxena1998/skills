@@ -2,13 +2,16 @@ package main
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
 // markdown renders frontmatter-stripped markdown into one \n-joined string of
-// ANSI-styled, width-wrapped lines. It handles block-level structure only;
-// inline markdown (*, **, backticks, links) is left as literal source text.
+// ANSI-styled, width-wrapped lines. Block structure is parsed line by line;
+// prose (headings, paragraphs, list items, quotes) is then parsed for inline
+// markdown (*, **, backticks, links) before it is wrapped, so that stripping
+// the delimiters does not change the wrap width.
 func markdown(src string, width int) string {
 	width = max(1, width)
 	var out []string
@@ -29,13 +32,22 @@ func markdown(src string, width int) string {
 		}
 		last = kind
 	}
-	// flush joins the pending paragraph lines into one and wraps them.
+	// flush joins the pending paragraph lines into one and wraps them. Inline
+	// markdown is parsed per source line, so a delimiter pair can't span the
+	// newline between two lines of the same paragraph.
 	flush := func() {
 		if len(para) == 0 {
 			return
 		}
 		sep("para")
-		out = append(out, wrap(strings.Join(para, " "), "", "", width, ui.text)...)
+		var spans []span
+		for i, line := range para {
+			if i > 0 {
+				spans = append(spans, span{text: " "})
+			}
+			spans = append(spans, inline(line)...)
+		}
+		out = append(out, wrapSpans(spans, "", "", width, ui.text)...)
 		para = para[:0]
 	}
 
@@ -64,7 +76,7 @@ func markdown(src string, width int) string {
 			if level == 1 {
 				style = ui.title
 			}
-			out = append(out, wrap(text, "", "", width, style)...)
+			out = append(out, wrapSpans(inline(text), "", "", width, style)...)
 			continue
 		}
 		if indent, marker, content, ok := listItem(line); ok {
@@ -72,13 +84,13 @@ func markdown(src string, width int) string {
 			sep("list")
 			first := indent + marker
 			rest := indent + strings.Repeat(" ", lipgloss.Width(marker))
-			out = append(out, wrap(content, first, rest, width, ui.text)...)
+			out = append(out, wrapSpans(inline(content), first, rest, width, ui.text)...)
 			continue
 		}
 		if content, ok := quoteLine(line); ok {
 			flush()
 			sep("quote")
-			out = append(out, wrap(content, "> ", "> ", width, ui.dim)...)
+			out = append(out, wrapSpans(inline(content), "> ", "> ", width, ui.dim)...)
 			continue
 		}
 		if strings.TrimSpace(line) == "" {
@@ -178,16 +190,186 @@ func wrapCode(line string, width int, style lipgloss.Style) []string {
 	return out
 }
 
-// wrap breaks text into lines no wider than width columns. The first line is
-// prefixed with first and the rest with rest, both counted against width. Words
-// longer than a line are broken rather than dropped.
-func wrap(text, first, rest string, width int, style lipgloss.Style) []string {
-	words := strings.Fields(text)
+// span is one run of text carrying a single style. A zero style means the base
+// style of the line it sits on.
+type span struct {
+	text  string
+	style lipgloss.Style
+}
+
+// inline parses the inline markdown in one source line into styled spans. It is
+// left-to-right and greedy: backtick, then **, then *, then a [label](dest)
+// link; anything it cannot match cleanly is kept as literal text.
+func inline(text string) []span {
+	code, bold, italic := ui.label, ui.text.Bold(true), ui.text.Italic(true)
+	var spans []span
+	var lit []rune
+	flush := func() {
+		if len(lit) > 0 {
+			spans = append(spans, span{text: string(lit)})
+			lit = lit[:0]
+		}
+	}
+
+	r := []rune(text)
+	for i := 0; i < len(r); {
+		switch c := r[i]; {
+		case c == '`':
+			if j := indexRune(r[i+1:], '`'); j >= 1 {
+				flush()
+				spans = append(spans, span{string(r[i+1 : i+1+j]), code})
+				i += j + 2
+				continue
+			}
+			lit = append(lit, c)
+			i++
+		case c == '*':
+			k := starRun(r, i)
+			// Three or more stars are ambiguous, so the whole run stays literal.
+			if k >= 3 {
+				lit = append(lit, r[i:i+k]...)
+				i += k
+				continue
+			}
+			// Bold wins over italic: a clean close is the next star run of the
+			// exact same length, leaving non-empty content between the two.
+			if j, ok := closingStar(r, i+k, k); ok {
+				flush()
+				if k == 2 {
+					spans = append(spans, span{string(r[i+k : j]), bold})
+				} else {
+					spans = append(spans, span{string(r[i+k : j]), italic})
+				}
+				i = j + k
+				continue
+			}
+			lit = append(lit, r[i:i+k]...)
+			i += k
+		case c == '[':
+			// ![alt](src) is an image, which this renderer does not support, so a
+			// link right after a ! stays literal rather than losing the !.
+			if i > 0 && r[i-1] == '!' {
+				lit = append(lit, c)
+				i++
+				continue
+			}
+			if label, dest, n, ok := parseLink(r[i:]); ok {
+				flush()
+				spans = append(spans, span{label, ui.label}, span{" " + dest, ui.dim})
+				i += n
+				continue
+			}
+			lit = append(lit, c)
+			i++
+		default:
+			lit = append(lit, c)
+			i++
+		}
+	}
+	flush()
+	return spans
+}
+
+// starRun is the length of the run of stars starting at r[i].
+func starRun(r []rune, i int) int {
+	n := 0
+	for i+n < len(r) && r[i+n] == '*' {
+		n++
+	}
+	return n
+}
+
+// closingStar reports the next star run at or after r[from:] and whether it is
+// exactly want stars long. Only an equal-length run can close this opener, and
+// the first one after the opener is the only candidate: any earlier different
+// run would mean nested emphasis, which inline refuses to guess at.
+func closingStar(r []rune, from, want int) (int, bool) {
+	for j := from; j < len(r); j++ {
+		if r[j] == '*' {
+			return j, starRun(r, j) == want
+		}
+	}
+	return 0, false
+}
+
+// parseLink reads a [label](dest) link starting at r[0]. It returns the label,
+// the destination and the runes consumed, or ok=false when the syntax is broken.
+func parseLink(r []rune) (label, dest string, n int, ok bool) {
+	closeB := indexRune(r[1:], ']')
+	if closeB < 0 {
+		return "", "", 0, false
+	}
+	label = string(r[1 : 1+closeB])
+	if label == "" {
+		return "", "", 0, false
+	}
+	paren := 1 + closeB + 1
+	if paren >= len(r) || r[paren] != '(' {
+		return "", "", 0, false
+	}
+	closeP := indexRune(r[paren+1:], ')')
+	if closeP < 0 {
+		return "", "", 0, false
+	}
+	dest = string(r[paren+1 : paren+1+closeP])
+	return label, dest, paren + 1 + closeP + 1, true
+}
+
+func indexRune(r []rune, c rune) int {
+	for i, x := range r {
+		if x == c {
+			return i
+		}
+	}
+	return -1
+}
+
+// flatten returns the spans' text as runes and, per rune, the index of the span
+// that owns it, so wrapping can cut through a span without losing its style.
+func flatten(spans []span) ([]rune, []int) {
+	var r []rune
+	var owner []int
+	for i, sp := range spans {
+		for _, c := range sp.text {
+			r = append(r, c)
+			owner = append(owner, i)
+		}
+	}
+	return r, owner
+}
+
+// wrange is one word's [start,end) rune range into flattened text.
+type wrange struct{ start, end int }
+
+// wordsOf splits flattened text into words on whitespace, the same split the
+// block renderer used to get with strings.Fields.
+func wordsOf(r []rune) []wrange {
+	var out []wrange
+	for i := 0; i < len(r); {
+		if unicode.IsSpace(r[i]) {
+			i++
+			continue
+		}
+		start := i
+		for i < len(r) && !unicode.IsSpace(r[i]) {
+			i++
+		}
+		out = append(out, wrange{start, i})
+	}
+	return out
+}
+
+// wrapSpans word-wraps styled spans to width columns, keeping each rune's style.
+// The first line is prefixed with first and the rest with rest, both rendered in
+// the base style and counted against width.
+func wrapSpans(spans []span, first, rest string, width int, base lipgloss.Style) []string {
+	r, owner := flatten(spans)
+	words := wordsOf(r)
 	if len(words) == 0 {
 		return nil
 	}
 	var out []string
-	var cur []string
+	var cur []wrange
 	prefix := first
 	curW := lipgloss.Width(prefix)
 
@@ -195,14 +377,14 @@ func wrap(text, first, rest string, width int, style lipgloss.Style) []string {
 		if len(cur) == 0 {
 			return
 		}
-		out = append(out, style.Render(prefix+strings.Join(cur, " ")))
+		out = append(out, renderLine(prefix, cur, r, owner, spans, base))
 		cur = nil
 		prefix = rest
 		curW = lipgloss.Width(prefix)
 	}
 
 	for _, w := range words {
-		wW := lipgloss.Width(w)
+		wW := lipgloss.Width(string(r[w.start:w.end]))
 		space := 0
 		if len(cur) > 0 {
 			space = 1
@@ -220,7 +402,7 @@ func wrap(text, first, rest string, width int, style lipgloss.Style) []string {
 			curW = lipgloss.Width(prefix) + wW
 			continue
 		}
-		out = append(out, hardBreak(w, prefix, rest, width, style)...)
+		out = append(out, hardBreakRunes(r[w.start:w.end], owner[w.start:w.end], spans, prefix, rest, width, base)...)
 		prefix = rest
 		curW = lipgloss.Width(prefix)
 	}
@@ -228,22 +410,80 @@ func wrap(text, first, rest string, width int, style lipgloss.Style) []string {
 	return out
 }
 
-// hardBreak renders one over-long word, breaking it across lines with first on
-// the first line and rest on the continuation lines.
-func hardBreak(word, first, rest string, width int, style lipgloss.Style) []string {
+// renderLine renders prefix in the base style, then each word with its own
+// styles, separated by single spaces.
+func renderLine(prefix string, words []wrange, r []rune, owner []int, spans []span, base lipgloss.Style) string {
+	var b strings.Builder
+	if prefix != "" {
+		b.WriteString(base.Render(prefix))
+	}
+	for i, w := range words {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(renderRange(r[w.start:w.end], owner[w.start:w.end], spans, base))
+	}
+	return b.String()
+}
+
+// renderRange renders runes, merging consecutive runes that share a span so each
+// style is emitted once rather than per rune.
+func renderRange(r []rune, owner []int, spans []span, base lipgloss.Style) string {
+	var b strings.Builder
+	for i := 0; i < len(r); {
+		idx := owner[i]
+		j := i + 1
+		for j < len(r) && owner[j] == idx {
+			j++
+		}
+		b.WriteString(spans[idx].style.Inherit(base).Render(string(r[i:j])))
+		i = j
+	}
+	return b.String()
+}
+
+// hardBreakRunes breaks one over-long word across lines, splitting its styles
+// along with its runes.
+func hardBreakRunes(r []rune, owner []int, spans []span, first, rest string, width int, base lipgloss.Style) []string {
 	var out []string
 	p := first
-	for word != "" {
+	for len(r) > 0 {
 		avail := width - lipgloss.Width(p)
 		if avail < 1 {
 			avail = 1
 		}
-		piece, rem := take(word, avail)
-		out = append(out, style.Render(p+piece))
-		word = rem
+		n := takeRunes(r, avail)
+		var b strings.Builder
+		if p != "" {
+			b.WriteString(base.Render(p))
+		}
+		b.WriteString(renderRange(r[:n], owner[:n], spans, base))
+		out = append(out, b.String())
+		r = r[n:]
+		owner = owner[n:]
 		p = rest
 	}
 	return out
+}
+
+// takeRunes returns how many leading runes fit in width columns. A single rune
+// wider than width is kept whole rather than dropped.
+func takeRunes(r []rune, width int) int {
+	if width < 1 {
+		width = 1
+	}
+	w := 0
+	for i, c := range r {
+		cw := lipgloss.Width(string(c))
+		if w+cw > width {
+			if i == 0 {
+				return 1
+			}
+			return i
+		}
+		w += cw
+	}
+	return len(r)
 }
 
 // take splits s into the longest prefix fitting in width columns and the rest.
