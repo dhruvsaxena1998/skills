@@ -3,6 +3,15 @@
 Changes to `skillset` and to the skills this repo ships. Each release's commit list is on
 its [GitHub release](https://github.com/dhruvsaxena1998/skills/releases).
 
+## v0.1.4 — 2026-10-18
+
+### Changed
+
+- The skill preview renders Markdown with a small built-in renderer instead of
+  Glamour. It draws headings, paragraphs, lists, block quotes, fenced code, and
+  inline code, emphasis and links. The stripped binary is roughly half the size:
+  6.80 MiB, down from 13.55 MiB (#31).
+
 ## v0.1.3 — 2026-10-17
 
 ### Added
