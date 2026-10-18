@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 )
 
 // binding is one key the TUI answers to. This table is the only list of them:
@@ -264,8 +263,8 @@ func (m *model) resizePop() {
 	m.popTop = top
 }
 
-// skipFrontmatter drops the YAML header, which glamour would otherwise draw as a
-// stray rule and heading; the detail column already shows what is in it.
+// skipFrontmatter drops the YAML header, which the renderer would otherwise draw
+// as a stray heading; the detail column already shows what is in it.
 func skipFrontmatter(src string) string {
 	rest, ok := strings.CutPrefix(src, "---\n")
 	if !ok {
@@ -275,16 +274,4 @@ func skipFrontmatter(src string) string {
 		return strings.TrimLeft(after, "\n")
 	}
 	return src
-}
-
-// markdown renders with glamour's own dark style. Mapping the skillset theme onto
-// a glamour StyleConfig would have to be redone for every theme added.
-func markdown(src string, width int) string {
-	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(width))
-	if err == nil {
-		if out, err := r.Render(src); err == nil {
-			return out
-		}
-	}
-	return src // the file itself beats an error about not being able to draw it
 }
