@@ -94,5 +94,14 @@
       "ponytail-help": { "requires": ["ponytail"] },
       "ponytail-review": { "optional": ["ponytail"] }
     }
+  },
+  "taste": {
+    "repo": "https://github.com/Leonxlnx/taste-skill",
+    "ref": "main",
+    "path": "skills",
+    "skills": ["taste-skill"],
+    "deps": {
+      "taste-skill": {}
+    }
   }
 }
