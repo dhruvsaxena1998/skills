@@ -135,9 +135,14 @@ skillset enable <skill>  turn a skill on here, with what it requires
 skillset disable <skill> turn it off, with the skills that require it
 skillset apply           link enabled skills, unlink the rest
 skillset sync <source>   pull a source's skills from upstream into this repo
+skillset playbook        print the playbook (AGENTS.md) for setting up a skills repo
 skillset update          replace this binary with the latest release
 skillset version         print the version of this binary (--version, -v)
 ```
+
+`playbook` prints `AGENTS.md`, the recipes for adding sources, skills, patches and hooks.
+To start a skills repo of your own, hand it to your agent instead of copying the file:
+`skillset playbook > AGENTS.md` in the new repo, then `echo '@AGENTS.md' > CLAUDE.md`.
 
 `enable` and `disable` change the selection without the screen, which is how agents and
 scripts change it. Neither one links anything; `apply` does that.

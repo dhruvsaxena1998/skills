@@ -21,6 +21,7 @@ const usage = `skillset links this repo's skills into your agent folders.
   skillset disable <skill> turn it off, with the skills that require it
   skillset apply           link enabled skills, unlink the rest
   skillset sync <source>   pull a source's skills from upstream into this repo
+  skillset playbook        print the playbook (AGENTS.md) for setting up a skills repo
   skillset update          replace this binary with the latest release
   skillset version         print the version of this binary (--version, -v)
 `
@@ -86,6 +87,8 @@ func run(args []string, out io.Writer, in io.Reader) error {
 			fmt.Fprintln(out, w)
 		}
 		return nil
+	case "playbook":
+		return playbookCmd(out)
 	case "update":
 		return updateCmd(args[1:], out)
 	case "version", "--version", "-v":
