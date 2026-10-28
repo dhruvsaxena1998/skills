@@ -170,6 +170,7 @@ A skill whose `deps` entry lists `agents` gets each `agents/<name>.md` linked in
 | `ponytail`   | [dietrichgebert/ponytail](https://github.com/dietrichgebert/ponytail)         | `vendor/ponytail`   |
 | `taste`      | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill)                 | `vendor/taste`      |
 | `caveman`    | [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)               | `vendor/caveman`    |
+| `plannotator` | [backnotprop/plannotator › apps/skills/core](https://github.com/backnotprop/plannotator/tree/main/apps/skills/core) | `vendor/plannotator` |
 
 ## How upstream sync works
 
