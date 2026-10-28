@@ -12,15 +12,16 @@ import (
 
 // target is an agent's skills folder and hook config, relative to the home folder.
 type target struct {
-	name  string
-	dir   string
-	hooks string
+	name   string
+	dir    string
+	hooks  string
+	agents string // "" when the agent has no folder of markdown subagents
 }
 
 var targets = []target{
 	// .claude/skills is the only folder Claude Code reads; .agents/skills is read by Codex, pi and OpenCode.
-	{"claude", filepath.Join(".claude", "skills"), filepath.Join(".claude", "settings.json")},
-	{"agents", filepath.Join(".agents", "skills"), filepath.Join(".codex", "hooks.json")},
+	{"claude", filepath.Join(".claude", "skills"), filepath.Join(".claude", "settings.json"), filepath.Join(".claude", "agents")},
+	{"agents", filepath.Join(".agents", "skills"), filepath.Join(".codex", "hooks.json"), ""},
 }
 
 // legacyDirs held links from scripts/link.sh and are emptied of our links on every apply.
@@ -79,6 +80,12 @@ func createLink(dest, link string) (string, error) {
 func isSkill(skillsDir, name string) bool {
 	_, err := os.Stat(filepath.Join(skillsDir, name, "SKILL.md"))
 	return err == nil
+}
+
+// isAgent reports whether the repo holds an agent file of that name.
+func isAgent(agentsDir, name string) bool {
+	info, err := os.Stat(filepath.Join(agentsDir, name))
+	return err == nil && !info.IsDir()
 }
 
 // repoSkills lists every skill folder in the repo.

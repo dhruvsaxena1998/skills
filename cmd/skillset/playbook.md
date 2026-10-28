@@ -44,7 +44,7 @@ The file is one object, a source name to its source. The name is what
 | `path`   | string   | no       | The folder under the clone to search. Omitted means the clone root           |
 | `skills` | string[] | yes      | The folder names to take, found anywhere under `path`                        |
 | `files`  | string[] | no       | Globs of other files to copy, relative to the clone root, not to `path`      |
-| `deps`   | object   | no       | A skill name to `{ "requires": [], "optional": [] }`, see Dependencies       |
+| `deps`   | object   | no       | A skill name to `{ "requires", "optional", "agents" }`, see Dependencies     |
 
 Paths in `path` and `files` use forward slashes on every OS.
 
@@ -114,13 +114,13 @@ A skill you write goes straight into `skills/<name>/` on the branch, with no
 `isSkill()` is the whole test for what counts as a skill: `skills/<name>/SKILL.md` has to
 exist. Nothing else is checked. The folder name is the skill's name everywhere — in
 `skillset enable`, in the `deps` map, in the link in the agent folder, in the
-`../<name>/SKILL.md` paths other skills use. All 29 skills here are lowercase with
-hyphens and repeat their folder name in the frontmatter `name`. Match that. The folder is
-linked whole, so references, scripts and subagent files sit beside `SKILL.md` and reach
-the agent with it, the way `skills/tdd/mocking.md`, `skills/diagnosing-bugs/scripts/` and
-`skills/research/agents/` do.
+`../<name>/SKILL.md` paths other skills use. All 49 skills here are lowercase with
+hyphens, and all but `taste-skill` repeat their folder name in the frontmatter `name`.
+Match that. The folder is linked whole, so references, scripts and subagent files sit
+beside `SKILL.md` and reach the agent with it, the way `skills/tdd/mocking.md`,
+`skills/diagnosing-bugs/scripts/` and `skills/research/agents/` do.
 
-1. Write `SKILL.md`. Every skill here sets `name` and `description`; 13 also set
+1. Write `SKILL.md`. Every skill here sets `name` and `description`; 18 also set
    `disable-model-invocation`.
 
    ```yaml
@@ -275,6 +275,22 @@ A skill that ships a hook needs two things: the script vendored through the sour
 
 `{{ROOT}}` expands to the repo path with forward slashes. `skillset apply` registers the
 entry only while that skill is enabled, and removes it when it isn't.
+
+## Subagents
+
+Claude Code loads subagents only from `~/.claude/agents`, so a subagent file inside a
+skill folder is read by that skill, never registered. A skill that needs real subagents,
+the way `cavecrew` sends work to `cavecrew-builder`, lists them in its `deps` entry:
+
+```json
+"cavecrew": { "agents": ["cavecrew-builder", "cavecrew-investigator", "cavecrew-reviewer"] }
+```
+
+Each name is `agents/<name>.md` in the repo, vendored through the source's `files`
+globs (`"agents/cavecrew-*.md"`) or committed by hand for a skill of your own.
+`skillset apply` links each one into `~/.claude/agents` while the skill is enabled and
+removes the link when it isn't. The `agents` target has no subagent folder and gets none.
+A name with no file prints `skip agent <name>.md: not in the repo` and links the rest.
 
 ## Finish
 

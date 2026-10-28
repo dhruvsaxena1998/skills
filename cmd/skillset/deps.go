@@ -11,10 +11,12 @@ import (
 )
 
 // dep is one skill's entry in the repo's dependency map: skills it can't work
-// without, and skills that only improve it.
+// without, skills that only improve it, and the subagents it ships.
 type dep struct {
 	Requires []string `json:"requires"`
 	Optional []string `json:"optional"`
+	// Agents names the subagents the skill ships, each agents/<name>.md in the repo.
+	Agents []string `json:"agents"`
 }
 
 // source is one upstream in sources.json: where its skills come from, which ones we

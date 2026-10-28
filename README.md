@@ -9,6 +9,8 @@ The agent skills I use, collected from several upstream repos, with room for my 
 skills/<name>/SKILL.md   every skill, flat, whatever its source
 sources.json             which skills to take from which upstream, and how they depend on each other
 hooks/                   vendored hook scripts, plus hooks.json (mine) registering them
+agents/                  vendored subagents, linked while the skill that ships them is enabled
+src/hooks/               caveman's hook scripts, vendored where its scripts expect them
 licenses/                upstream licenses
 cmd/skillset/            the skillset binary
 AGENTS.md                how to add a source, a skill, a patch or a hook
@@ -53,10 +55,10 @@ switching over removes nothing.
 
 Targets are the agent folders to link into, both on by default:
 
-| Target   | Skills            | Hooks                   | Read by                   |
-| -------- | ----------------- | ----------------------- | ------------------------- |
-| `claude` | `~/.claude/skills` | `~/.claude/settings.json` | Claude Code             |
-| `agents` | `~/.agents/skills` | `~/.codex/hooks.json`     | Codex, pi, OpenCode     |
+| Target   | Skills             | Hooks                     | Subagents          | Read by             |
+| -------- | ------------------ | ------------------------- | ------------------ | ------------------- |
+| `claude` | `~/.claude/skills` | `~/.claude/settings.json` | `~/.claude/agents` | Claude Code         |
+| `agents` | `~/.agents/skills` | `~/.codex/hooks.json`     | none               | Codex, pi, OpenCode |
 
 ## Your own skills repo
 
@@ -155,6 +157,10 @@ entries in `hooks/hooks.json` for enabled skills only, after any other tool's en
 backing the file up to `.bak` before writing. Codex asks you to trust changed hooks on its
 next start. Run `apply` after a pull.
 
+A skill whose `deps` entry lists `agents` gets each `agents/<name>.md` linked into
+`~/.claude/agents` while it is enabled, and pruned the same way skill links are. The
+`agents` target has no subagent folder, so it links none.
+
 ## Sources
 
 | Source       | Upstream                                                                      | Branch              |
@@ -162,6 +168,8 @@ next start. Run `apply` after a pull.
 | `mattpocock` | [mattpocock/skills](https://github.com/mattpocock/skills)                     | `vendor/mattpocock` |
 | `pstack`     | [cursor/plugins › pstack](https://github.com/cursor/plugins/tree/main/pstack) | `vendor/pstack`     |
 | `ponytail`   | [dietrichgebert/ponytail](https://github.com/dietrichgebert/ponytail)         | `vendor/ponytail`   |
+| `taste`      | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill)                 | `vendor/taste`      |
+| `caveman`    | [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)               | `vendor/caveman`    |
 
 ## How upstream sync works
 
