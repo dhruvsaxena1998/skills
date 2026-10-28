@@ -4,18 +4,36 @@
       "skill": "ponytail",
       "matcher": "startup|resume|clear|compact",
       "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/hooks/ponytail-activate.js\"", "timeout": 5, "statusMessage": "Loading ponytail mode..." }]
+    },
+    {
+      "skill": "caveman",
+      "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/src/hooks/caveman-activate.js\"", "timeout": 30, "statusMessage": "Loading caveman mode..." }]
     }
   ],
   "SubagentStart": [
     {
       "skill": "ponytail",
       "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/hooks/ponytail-subagent.js\"", "timeout": 5, "statusMessage": "Loading ponytail mode..." }]
+    },
+    {
+      "skill": "caveman",
+      "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/src/hooks/caveman-activate.js\" --subagent", "timeout": 30, "statusMessage": "Loading caveman mode for subagent..." }]
     }
   ],
   "UserPromptSubmit": [
     {
       "skill": "ponytail",
       "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/hooks/ponytail-mode-tracker.js\"", "timeout": 5, "statusMessage": "Tracking ponytail mode..." }]
+    },
+    {
+      "skill": "caveman",
+      "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/src/hooks/caveman-mode-tracker.js\"", "timeout": 30, "statusMessage": "Tracking caveman mode..." }]
+    }
+  ],
+  "SessionEnd": [
+    {
+      "skill": "caveman-stats",
+      "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/src/hooks/caveman-stats.js\" --record", "timeout": 5 }]
     }
   ]
 }
