@@ -3,6 +3,20 @@
 Changes to `skillset` and to the skills this repo ships. Each release's commit list is on
 its [GitHub release](https://github.com/dhruvsaxena1998/skills/releases).
 
+## v0.1.6 — 2026-10-28
+
+### Added
+
+- A skill's `deps` entry can list `agents`. `skillset apply` links each `agents/<name>.md`
+  into `~/.claude/agents` while the skill is enabled, and removes the link when it isn't.
+- The `caveman` source: 16 skills, its hooks, and the `cavecrew` subagents (#36).
+
+### Fixed
+
+- `skillset apply` treats a hook as its own when the command runs any script in the repo,
+  not only one in `hooks/`. Hooks vendored at another path, like caveman's `src/hooks/`,
+  were added again on every `apply` and never removed.
+
 ## v0.1.5 — 2026-10-28
 
 ### Added
