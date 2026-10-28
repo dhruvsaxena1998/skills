@@ -6,8 +6,9 @@ explains what the commands do, and so does `skillset help` where there is no REA
 file is what to do when you change the repo.
 
 Starting from an empty folder instead: sources.json below has the two files a repo needs
-and the four commands that make one. Copy this file and its one-line `CLAUDE.md` in with
-them, and every recipe here applies to that repo as written.
+and the four commands that make one. Add this file with `skillset playbook > AGENTS.md`
+and its one-line `CLAUDE.md` with `echo '@AGENTS.md' > CLAUDE.md`, and every recipe here
+applies to that repo as written.
 
 Work on a branch. Run `skillset` commands from the clone `skillset init` recorded: `sync`
 reads the repo path out of `~/.config/skillset/config.json`, not the working directory. In a

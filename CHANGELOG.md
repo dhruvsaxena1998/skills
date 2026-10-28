@@ -3,12 +3,13 @@
 Changes to `skillset` and to the skills this repo ships. Each release's commit list is on
 its [GitHub release](https://github.com/dhruvsaxena1998/skills/releases).
 
-## Unreleased
+## v0.1.5 — 2026-10-28
 
 ### Added
 
 - `skillset playbook` prints `AGENTS.md`, so a new skills repo gets its setup instructions
   from the binary instead of a copy of the file.
+- The `taste` source, with `taste-skill`.
 
 ## v0.1.4 — 2026-10-18
 
