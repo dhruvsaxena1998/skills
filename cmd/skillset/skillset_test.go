@@ -402,3 +402,36 @@ func TestDisableRefusesANameItDoesNotKnow(t *testing.T) {
 		t.Fatalf("err = %v, want a typo to be refused, not reported as done", err)
 	}
 }
+
+func TestApplyLinksTheAgentsOfEnabledSkillsIntoClaudeOnly(t *testing.T) {
+	home, repo := setup(t, "crew", "solo")
+	write(t, filepath.Join(repo, "sources.json"), `{"s": {"deps": {
+		"crew": { "agents": ["builder", "missing"] },
+		"solo": { "agents": ["reviewer"] }
+	}}}`)
+	write(t, filepath.Join(repo, "agents", "builder.md"), "# builder")
+	write(t, filepath.Join(repo, "agents", "reviewer.md"), "# reviewer")
+	claude := filepath.Join(home, ".claude", "agents")
+	symlink(t, filepath.Join(repo, "agents", "reviewer.md"), filepath.Join(claude, "reviewer.md")) // its skill is off now
+	write(t, filepath.Join(claude, "mine.md"), "# mine")
+	save(t, &Config{Repo: repo, Targets: []string{"claude", "agents"}, Enabled: []string{"crew"}})
+
+	out := skillset(t, "apply")
+
+	want := map[string]string{"builder.md": filepath.Join(repo, "agents", "builder.md"), "mine.md": "plain"}
+	if got := entries(t, claude); !mapsEqual(got, want) {
+		t.Fatalf("claude agents = %v, want %v", got, want)
+	}
+	if !strings.Contains(out, "skip agent missing.md: not in the repo") {
+		t.Fatalf("output = %q, want a word about the missing agent", out)
+	}
+	if out := skillset(t, "apply"); strings.Contains(out, "linked") || strings.Contains(out, "removed") {
+		t.Fatalf("second apply said %q, want no link changes", out)
+	}
+
+	save(t, &Config{Repo: repo, Targets: []string{"agents"}, Enabled: []string{"crew"}})
+	skillset(t, "apply")
+	if got := entries(t, claude); !mapsEqual(got, map[string]string{"mine.md": "plain"}) {
+		t.Fatalf("claude agents = %v, want ours gone once the target is off", got)
+	}
+}
