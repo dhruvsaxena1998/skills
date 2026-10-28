@@ -108,6 +108,13 @@
     "repo": "https://github.com/JuliusBrussee/caveman",
     "ref": "main",
     "path": "skills",
+    "files": [
+      "agents/cavecrew-*.md",
+      "src/hooks/caveman-*.js",
+      "src/hooks/cavecrew-model-overrides.js",
+      "src/hooks/caveman-statusline.sh",
+      "src/hooks/caveman-statusline.ps1"
+    ],
     "skills": [
       "cavecrew",
       "caveman",
@@ -127,7 +134,7 @@
       "verify-and-stop"
     ],
     "deps": {
-      "cavecrew": {},
+      "cavecrew": { "agents": ["cavecrew-builder", "cavecrew-investigator", "cavecrew-reviewer"] },
       "caveman": { "optional": ["megacave", "ultracave"] },
       "caveman-commit": {},
       "caveman-compress": {},
