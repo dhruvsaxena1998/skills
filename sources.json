@@ -151,5 +151,24 @@
       "ultracave": {},
       "verify-and-stop": {}
     }
+  },
+  "plannotator": {
+    "repo": "https://github.com/backnotprop/plannotator",
+    "ref": "v0.28.34",
+    "path": "apps/skills/core",
+    "skills": [
+      "plannotator",
+      "plannotator-annotate",
+      "plannotator-inbox",
+      "plannotator-last",
+      "plannotator-review"
+    ],
+    "deps": {
+      "plannotator": {},
+      "plannotator-annotate": {},
+      "plannotator-inbox": {},
+      "plannotator-last": {},
+      "plannotator-review": {}
+    }
   }
 }
