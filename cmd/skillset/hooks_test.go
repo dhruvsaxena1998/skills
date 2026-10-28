@@ -297,3 +297,27 @@ func TestInitWarnsAboutAHookConfigItCannotParseAndStillMoves(t *testing.T) {
 		t.Fatalf("repo = %v (%v), want %s saved", cfg, err, repo)
 	}
 }
+
+func TestApplyOwnsHooksWhoseScriptsLiveOutsideTheHooksFolder(t *testing.T) {
+	home, repo := setup(t, "caveman")
+	write(t, filepath.Join(repo, "hooks", "hooks.json"), `{
+		"SessionStart": [
+			{"skill": "caveman", "hooks": [{"type": "command", "command": "node \"{{ROOT}}/src/hooks/caveman-activate.js\""}]}
+		]
+	}`)
+	claude := filepath.Join(home, ".claude", "settings.json")
+	write(t, claude, foreign)
+	root := filepath.ToSlash(repo)
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"caveman"}})
+
+	skillset(t, "apply")
+	skillset(t, "apply")
+
+	wantCommands(t, claude, map[string][]string{
+		"SessionStart": {"first-tool", "second-tool", "node \"" + root + "/src/hooks/caveman-activate.js\""},
+	})
+
+	save(t, &Config{Repo: repo, Targets: []string{"claude"}})
+	skillset(t, "apply")
+	wantCommands(t, claude, map[string][]string{"SessionStart": {"first-tool", "second-tool"}})
+}
