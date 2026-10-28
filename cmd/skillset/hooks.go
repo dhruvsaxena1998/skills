@@ -91,7 +91,8 @@ func syncHooks(path, repo string, enabled []string, out io.Writer, dry bool) err
 	}
 	before, _ := json.Marshal(doc)
 
-	mine := filepath.ToSlash(repo) + "/hooks/"
+	// any script in the repo, not only hooks/: a vendored hook keeps its upstream path
+	mine := filepath.ToSlash(repo) + "/"
 	for event, list := range events {
 		kept := []map[string]any{}
 		for _, entry := range list {
@@ -148,7 +149,7 @@ func syncHooks(path, repo string, enabled []string, out io.Writer, dry bool) err
 	return nil
 }
 
-// ourEntry reports whether a hook entry runs a command out of this repo's hooks folder.
+// ourEntry reports whether a hook entry runs a command out of this repo.
 func ourEntry(entry map[string]any, prefix string) bool {
 	hooks, _ := entry["hooks"].([]any)
 	for _, h := range hooks {
