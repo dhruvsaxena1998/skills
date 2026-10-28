@@ -103,5 +103,46 @@
     "deps": {
       "taste-skill": {}
     }
+  },
+  "caveman": {
+    "repo": "https://github.com/JuliusBrussee/caveman",
+    "ref": "main",
+    "path": "skills",
+    "skills": [
+      "cavecrew",
+      "caveman",
+      "caveman-commit",
+      "caveman-compress",
+      "caveman-explore",
+      "caveman-help",
+      "caveman-review",
+      "caveman-stats",
+      "investigate-first",
+      "lean-build",
+      "megacave",
+      "migration",
+      "safe-refactor",
+      "surgical-patch",
+      "ultracave",
+      "verify-and-stop"
+    ],
+    "deps": {
+      "cavecrew": {},
+      "caveman": { "optional": ["megacave", "ultracave"] },
+      "caveman-commit": {},
+      "caveman-compress": {},
+      "caveman-explore": {},
+      "caveman-help": { "optional": ["caveman"] },
+      "caveman-review": {},
+      "caveman-stats": {},
+      "investigate-first": {},
+      "lean-build": {},
+      "megacave": {},
+      "migration": {},
+      "safe-refactor": {},
+      "surgical-patch": {},
+      "ultracave": {},
+      "verify-and-stop": {}
+    }
   }
 }
