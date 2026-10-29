@@ -21,9 +21,11 @@ type binding struct {
 }
 
 var bindings = []binding{
-	{"selection", "space · x", "turn a skill, a source or a target on or off", "space toggle"},
+	{"selection", "space · x", "turn a skill, profile, source or target on or off", "space toggle"},
+	{"selection", "n", "create a profile, or edit the one under the cursor", "n profile"},
+	{"selection", "d", "delete the profile under the cursor", "d delete"},
 	{"selection", "↑ ↓ · k j", "move inside a column", ""},
-	{"selection", "← → · h l", "on the skills step, between the sources and their skills", "←→ columns"},
+	{"selection", "← → · h l", "on the skills step, between a source or profile and its skills", "←→ columns"},
 	{"selection", "enter", "read the skill's SKILL.md", ""},
 	{"selection", "tab", "the next step: targets, then the review", "tab next step"},
 	{"selection", "shift+tab", "the step before", "shift+tab back"},
@@ -167,7 +169,8 @@ func (m *model) setTheme(name string) {
 	useTheme(name)
 	c := *m.cfg
 	// clones, because save sorts in place and must not reorder the saved selection
-	c.Enabled, c.Targets = slices.Clone(m.savedOn), slices.Clone(m.savedTargets)
+	c.Enabled, c.Direct = slices.Clone(m.savedOn), slices.Clone(m.savedDirect)
+	c.Profiles, c.Targets = slices.Clone(m.savedProfiles), slices.Clone(m.savedTargets)
 	if err := c.save(); err != nil {
 		m.status = err.Error()
 	}

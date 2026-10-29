@@ -17,10 +17,11 @@ const usage = `skillset links this repo's skills into your agent folders.
 
   skillset                 open the selection screen
   skillset init [path]     remember the skills clone (clones one if there is none)
-  skillset enable <skill>  turn a skill on here, with what it requires
-  skillset disable <skill> turn it off, with the skills that require it
+  skillset enable <skill|profile>  turn a skill on, or merge a profile in
+  skillset disable <skill|profile> turn a skill or profile off
   skillset apply           link enabled skills, unlink the rest
   skillset sync <source>   pull a source's skills from upstream into this repo
+  skillset profile ...     create, edit and delete profiles (ls, add, rm, set)
   skillset playbook        print the playbook (AGENTS.md) for setting up a skills repo
   skillset update          replace this binary with the latest release
   skillset version         print the version of this binary (--version, -v)
@@ -71,6 +72,8 @@ func run(args []string, out io.Writer, in io.Reader) error {
 		return disableCmd(args[1:], out)
 	case "sync":
 		return syncCmd(args[1:], out)
+	case "profile":
+		return profileCmd(args[1:], out)
 	case "apply":
 		cfg, err := loadConfig()
 		if err != nil {

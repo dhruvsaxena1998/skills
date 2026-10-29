@@ -92,6 +92,7 @@ A repo `skillset` accepts is two things:
 ```text
 sources.json   required, and `{}` is valid: a repo of nothing but your own skills
 skills/        required, and may be empty
+profiles.json  optional, named groups of skills to enable together
 hooks/         optional, holds hooks.json and the scripts it names
 licenses/      written by sync
 ```
@@ -261,6 +262,57 @@ Skills reference each other by relative path (`../unslop/SKILL.md`), not by name
 most pstack skills set `disable-model-invocation` and can't be called through the Skill
 tool. `skillset sync` warns when a skill links to a sibling it doesn't list in `deps`.
 Fix the map when you see that warning.
+
+## Profiles
+
+`profiles.json` is an optional object of profile names to a description and a flat skill
+list. Profiles can mix skills from any source, and sync never changes the file.
+
+```json
+{
+  "writing": {
+    "description": "Draft and edit clear prose",
+    "skills": ["unslop", "technical-writing"]
+  }
+}
+```
+
+`skillset enable writing` merges the members and their requirements into the current
+selection; enabling another profile does not disable the first. `skillset disable writing`
+removes only its listed members, keeping any that were enabled directly, belong to another
+enabled profile, or are required by a skill that remains enabled. Unlisted requirements stay
+enabled, matching ordinary skill disable behavior. A same-named skill wins over a profile;
+`profile:writing` selects the profile explicitly.
+
+The machine config records directly enabled skills and enabled profiles separately from the
+flattened `enabled` list that `apply` consumes. Older configs adopt their existing enabled
+skills as direct selections on the next save, so adding profiles never makes the first
+profile disable remove a pre-existing choice.
+
+The selection screen shows profiles in their own section. Space merges or removes a profile,
+and the middle column carries the same member skills with navigation back and forth. `n`
+opens the profile editor (empty to create, or the profile under the cursor to edit), and `d`
+deletes the profile under the cursor. A profile edit writes `profiles.json` at once;
+selection changes join the same pending review as skill and target changes, and nothing
+links until save.
+
+Editing is also on the command line, where agents and scripts change definitions:
+
+```sh
+skillset profile ls
+skillset profile add <name> <skill>... [--desc <text>]
+skillset profile set <name> <skill>... [--desc <text>]
+skillset profile rm <name>
+```
+
+`add` creates the profile or merges the members in; `set` replaces the member list, or with
+only `--desc` keeps it. A member name that isn't a skill in the repo is refused before
+anything is written, as is a profile left with no skills. `--desc` takes the rest of the line
+so a description with spaces needs no quoting; `--desc=<text>` works too and `--desc ""`
+clears it. A new profile's name can't match a skill, start with `-` or `profile:`, or contain
+spaces, so `skillset enable <name>` always reaches it. A repo with no `profiles.json` works as
+before, and the first `profile add` creates the file. These edit the repo's
+`profiles.json`, never the machine selection, so they never need `skillset apply`.
 
 ## Hooks
 

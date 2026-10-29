@@ -15,15 +15,29 @@ import (
 
 type rowKind int
 
-// The order is the order of the steps: the sources and their skills, then the
-// targets and the entries we don't own. Column one prints a heading wherever the
-// kind changes.
+// The order is the order of the steps: the sources and profiles with their skills,
+// then the targets and the entries we don't own. Column one prints a heading wherever
+// the kind changes.
 const (
 	rowSource rowKind = iota
+	rowProfile
 	rowSkill
 	rowTarget
 	rowOther // an entry in an agent folder that this repo didn't create
 )
+
+const profilePrefix = "profile:"
+
+func profileGroup(name string) string { return profilePrefix + name }
+
+func profileName(group string) (string, bool) {
+	return strings.CutPrefix(group, profilePrefix)
+}
+
+func isProfileGroup(group string) bool {
+	_, ok := profileName(group)
+	return ok
+}
 
 // stepOf is the screen a row belongs to. Targets and what else lives in their
 // folders are the second step; everything else is the first.
@@ -34,26 +48,31 @@ func stepOf(k rowKind) tabID {
 	return tabSkills
 }
 
-var headings = map[rowKind]string{rowSource: "SOURCES", rowTarget: "TARGETS", rowOther: "NOT OURS"}
+var headings = map[rowKind]string{rowSource: "SOURCES", rowProfile: "PROFILES", rowTarget: "TARGETS", rowOther: "NOT OURS"}
+
+// profileEdit is the overlay that creates or edits a profile: name on the first
+// line, skills on the rest.
+const profileEdit = "profiles"
 
 type row struct {
 	kind rowKind
 	name string
-	src  string // a skill's source, or the folder a target or a foreign entry is
+	src  string // a skill's source/profile group, or the folder a target or foreign entry is
 	note string
 }
 
 type model struct {
-	cfg     *Config
-	deps    map[string]dep
-	sources map[string]source
-	home    string
+	cfg      *Config
+	deps     map[string]dep
+	sources  map[string]source
+	profiles map[string]profile
+	home     string
 
 	step   tabID  // the step on screen: the skills or the targets
 	rows   []row  // everything, unfiltered
 	shown  []int  // indexes into rows that are on this step and pass the filter
 	cursor int    // index into shown
-	source string // the source whose skills the middle column is showing
+	source string // the source or profile group whose skills the middle column is showing
 
 	left, mid int // first visible line of each column, for scrolling
 
@@ -67,13 +86,20 @@ type model struct {
 
 	// the selection as it was last written, so the rail can say what a save would
 	// change rather than only what the last toggle did
-	savedOn, savedTargets []string
+	savedOn, savedDirect, savedProfiles, savedTargets []string
 
 	pop     string   // "skill:<name>" or "keys" while an overlay is up, "" when none is
 	popBody []string // its lines, the first of them its heading
 	popTop  int      // the first of those on screen
 	query   string   // the keys overlay's search box
 	setAt   int      // the settings row the overlay's cursor is on, len(settings) for the list
+
+	// profile editing: name and skills are each an inline text field the overlay
+	// edits. editField says which has focus; editLine is the text being typed.
+	editName   string   // the profile being edited/created; "" means create
+	editSkills []string // committed member list
+	editField  int      // 0 = name, 1 = skills
+	editLine   string   // the field text while it is being typed
 
 	desc    map[string]string   // skill -> description, read on demand
 	patches map[string][]string // skill -> local patch commits, loaded off the draw
@@ -107,9 +133,11 @@ func newModel(cfg *Config) (*model, error) {
 	if err != nil {
 		return nil, err
 	}
+	cfg.ensureDirect()
 	m := &model{cfg: cfg, home: home, width: 100, height: 30,
 		desc: map[string]string{}, patches: map[string][]string{}, loading: map[string]bool{},
-		savedOn: slices.Clone(cfg.Enabled), savedTargets: slices.Clone(cfg.Targets)}
+		savedOn: slices.Clone(cfg.Enabled), savedDirect: slices.Clone(cfg.Direct),
+		savedProfiles: slices.Clone(cfg.Profiles), savedTargets: slices.Clone(cfg.Targets)}
 	if err := m.reload(); err != nil {
 		return nil, err
 	}
@@ -126,7 +154,11 @@ func (m *model) reload() error {
 	if err != nil {
 		return err
 	}
-	m.sources, m.deps = sources, deps
+	profiles, err := loadProfiles(m.cfg.Repo)
+	if err != nil {
+		return err
+	}
+	m.sources, m.deps, m.profiles = sources, deps, profiles
 	m.desc, m.patches = map[string]string{}, map[string][]string{}
 	m.build()
 	return nil
@@ -162,17 +194,34 @@ func (m *model) build() {
 		}
 	}
 
+	for _, name := range m.profileNames() {
+		r := row{kind: rowProfile, name: name, src: profileGroup(name)}
+		p, exists := m.profiles[name]
+		if !exists {
+			r.note = "missing"
+		}
+		m.rows = append(m.rows, r)
+		listed := map[string]bool{}
+		for _, skill := range slices.Sorted(slices.Values(p.Skills)) {
+			if listed[skill] || !isSkill(skillsDir, skill) {
+				continue
+			}
+			listed[skill] = true
+			m.rows = append(m.rows, m.skillRow(skill, r.src))
+		}
+	}
+
 	for _, t := range targets {
 		m.rows = append(m.rows, row{kind: rowTarget, name: t.name,
 			src: filepath.Join(m.home, t.dir), note: filepath.Join("~", t.dir)})
 	}
 	m.rows = append(m.rows, m.unmanaged()...)
 
-	if m.sourceRow(m.source) < 0 {
+	if m.groupRow(m.source) < 0 {
 		m.source = ""
 		for _, r := range m.rows {
-			if r.kind == rowSource {
-				m.source = r.name
+			if r.kind == rowSource || r.kind == rowProfile {
+				m.source = groupKey(r)
 				break
 			}
 		}
@@ -180,14 +229,34 @@ func (m *model) build() {
 	m.refilter()
 }
 
-// sourceRow is where a source sits in rows, or -1 when it no longer exists.
-func (m *model) sourceRow(name string) int {
+func groupKey(r row) string {
+	if r.kind == rowProfile {
+		return r.src
+	}
+	return r.name
+}
+
+// groupRow is where a source or profile sits in rows, or -1 when it no longer exists.
+func (m *model) groupRow(name string) int {
 	for i, r := range m.rows {
-		if r.kind == rowSource && r.name == name {
+		if (r.kind == rowSource || r.kind == rowProfile) && groupKey(r) == name {
 			return i
 		}
 	}
 	return -1
+}
+
+// profileNames includes stale enabled profiles so their membership record can be
+// turned off even after the definition disappears from profiles.json.
+func (m *model) profileNames() []string {
+	names := map[string]bool{}
+	for name := range m.profiles {
+		names[name] = true
+	}
+	for _, name := range m.cfg.Profiles {
+		names[name] = true
+	}
+	return slices.Sorted(maps.Keys(names))
 }
 
 func (m *model) skillRow(skill, src string) row {
@@ -234,8 +303,10 @@ func (m *model) refilter() {
 		}
 		switch {
 		case f == "":
-		case r.kind == rowSource:
-			continue // a filter is a search for skills; a source can't match one
+		case r.kind != rowSkill:
+			continue // a filter is a search for skills, not their source or profile
+		case isProfileGroup(r.src):
+			continue // source rows already carry each skill; don't show profile duplicates
 		case !strings.Contains(strings.ToLower(r.name), f):
 			continue
 		}
@@ -260,8 +331,8 @@ func (m *model) at() (row, bool) {
 func (m *model) mark() {
 	switch r, ok := m.at(); {
 	case !ok:
-	case r.kind == rowSource:
-		m.source = r.name
+	case r.kind == rowSource || r.kind == rowProfile:
+		m.source = groupKey(r)
 	case r.kind == rowSkill:
 		m.source = r.src
 	}
@@ -312,6 +383,19 @@ func (m *model) jump(kind rowKind, name string) bool {
 	return false
 }
 
+func (m *model) jumpGroup(name string) bool {
+	for i, idx := range m.shown {
+		r := m.rows[idx]
+		if (r.kind == rowSource || r.kind == rowProfile) && groupKey(r) == name {
+			m.cursor = i
+			m.clear()
+			m.mark()
+			return true
+		}
+	}
+	return false
+}
+
 // clear drops the rail's line once the cursor leaves the row it was about, and
 // the pending quit with it, so a q after wandering off still asks once.
 func (m *model) clear() { m.cascade, m.asked = "", false }
@@ -329,7 +413,7 @@ func (m *model) setStep(s tabID) {
 	m.step, m.cursor = s, 0
 	m.refilter()
 	if s == tabSkills {
-		m.jump(rowSource, m.source) // back on the source you were reading
+		m.jumpGroup(m.source) // back on the source or profile you were reading
 	}
 }
 
@@ -534,7 +618,7 @@ func (m *model) scroll(x, step int) {
 	case x >= m.hit.x2 && r.kind != rowSkill:
 		m.jump(rowSkill, m.source)
 	case x < m.hit.x2 && r.kind == rowSkill:
-		m.jump(rowSource, r.src)
+		m.jumpGroup(r.src)
 	}
 	m.move(step)
 }
@@ -573,6 +657,10 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit // before the filter and review screens, which swallow keys
 	}
 	if m.pop != "" {
+		if m.pop == profileEdit {
+			m.editKey(msg)
+			return nil
+		}
 		if msg.String() == "q" && m.pop != "keys" {
 			msg = tea.KeyMsg{Type: tea.KeyEsc} // only the keys overlay takes typing, so here q dismisses
 		}
@@ -629,7 +717,7 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		m.move(1)
 	case "left", "h":
 		if r, ok := m.at(); ok && r.kind == rowSkill {
-			m.jump(rowSource, r.src)
+			m.jumpGroup(r.src)
 		}
 	case "right", "l":
 		if r, ok := m.at(); ok && r.kind != rowSkill {
@@ -637,6 +725,14 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 		}
 	case " ", "x":
 		m.toggle()
+	case "n":
+		if r, ok := m.at(); ok {
+			m.openEdit(r)
+		}
+	case "d":
+		if r, ok := m.at(); ok && r.kind == rowProfile {
+			m.deleteProfile(r.name)
+		}
 	case "/":
 		m.typing = true
 	case "p":
@@ -703,7 +799,8 @@ func (m *model) save() tea.Cmd {
 		return nil
 	}
 	m.review, m.dirty, m.asked = nil, false, false
-	m.savedOn, m.savedTargets = slices.Clone(m.cfg.Enabled), slices.Clone(m.cfg.Targets)
+	m.savedOn, m.savedDirect = slices.Clone(m.cfg.Enabled), slices.Clone(m.cfg.Direct)
+	m.savedProfiles, m.savedTargets = slices.Clone(m.cfg.Profiles), slices.Clone(m.cfg.Targets)
 	m.status = fmt.Sprintf("applied: %d changes", len(lines(buf.String())))
 	m.build()
 	return nil
@@ -725,6 +822,10 @@ func (m *model) toggle() {
 		}
 	case rowSource:
 		m.toggleSource(r.name)
+	case rowProfile:
+		if !m.toggleProfile(r.name) {
+			return
+		}
 	case rowSkill:
 		if !m.toggleSkill(r.name) {
 			return // nothing changed: the line already says why not
@@ -756,6 +857,12 @@ func (m *model) pending() string {
 	if n := extra(m.savedOn, m.cfg.Enabled); n > 0 {
 		parts = append(parts, plural(n, "skill")+" off")
 	}
+	if n := extra(m.cfg.Profiles, m.savedProfiles); n > 0 {
+		parts = append(parts, plural(n, "profile")+" on")
+	}
+	if n := extra(m.savedProfiles, m.cfg.Profiles); n > 0 {
+		parts = append(parts, plural(n, "profile")+" off")
+	}
 	if n := extra(m.cfg.Targets, m.savedTargets) + extra(m.savedTargets, m.cfg.Targets); n > 0 {
 		parts = append(parts, plural(n, "target")+" changed")
 	}
@@ -785,6 +892,9 @@ func (m *model) toggleSkill(name string) bool {
 		withDependents(name, m.deps, &drop)
 		var also []string
 		for _, n := range drop {
+			if i := slices.Index(m.cfg.Direct, n); i >= 0 {
+				m.cfg.Direct = slices.Delete(m.cfg.Direct, i, i+1)
+			}
 			if i := slices.Index(m.cfg.Enabled, n); i >= 0 {
 				m.cfg.Enabled = slices.Delete(m.cfg.Enabled, i, i+1)
 				if n != name {
@@ -803,6 +913,9 @@ func (m *model) toggleSkill(name string) bool {
 		m.cascade = "can't enable " + name + ": " + err.Error()
 		return false // nothing changed, so earlier changes stay unsaved
 	}
+	if !slices.Contains(m.cfg.Direct, name) {
+		m.cfg.Direct = append(m.cfg.Direct, name)
+	}
 	var also []string
 	for _, n := range want {
 		if !slices.Contains(m.cfg.Enabled, n) {
@@ -816,6 +929,178 @@ func (m *model) toggleSkill(name string) bool {
 		slices.Sort(also)
 		m.cascade = name + " on — also on, it requires them: " + strings.Join(also, ", ")
 	}
+	return true
+}
+
+// profileNameGroup returns the profile name a row belongs to. A profile row is
+// its own name; a skill row returns its profile only when it sits under one.
+func profileNameGroup(r row) string {
+	if r.kind == rowProfile {
+		return r.name
+	}
+	if n, ok := profileName(r.src); ok {
+		return n
+	}
+	return ""
+}
+
+// openEdit puts the current row's profile into the editor, or starts an empty
+// one when there is no profile under the cursor.
+func (m *model) openEdit(r row) {
+	name := profileNameGroup(r)
+	if name != "" {
+		if p, exists := m.profiles[name]; exists {
+			m.editName, m.editSkills = name, slices.Clone(p.Skills)
+		}
+	}
+	m.editField, m.editLine = 0, m.editName
+	m.pop = profileEdit
+	m.popTop = 0
+	m.popBody = m.editBody()
+}
+
+// editBody renders the editor: the name line, then the members, the focused field
+// marked by the typing bar.
+func (m *model) editBody() []string {
+	out := []string{
+		ui.text.Bold(true).Render("edit profile") + ui.dim.Render("  ·  tab picks a field  ·  enter saves  ·  esc cancels"),
+		"",
+	}
+	name := m.editLine
+	if m.editField != 0 {
+		name = m.editName
+	}
+	if m.editField == 0 {
+		name = m.editLine + ui.bar.Render(" ") + ui.label.Render("◂")
+	}
+	out = append(out, ui.label.Render("name ")+name)
+
+	// the skills line is edited as space-separated names
+	skills := strings.Join(m.editSkills, " ")
+	if m.editField == 1 {
+		skills = m.editLine + ui.bar.Render(" ") + ui.label.Render("◂")
+	}
+	out = append(out, "")
+	out = append(out, ui.label.Render("skills")+" "+ui.dim.Render(skills))
+	out = append(out, "", ui.dim.Render("members are space-separated; they must match skill folder names"))
+	return out
+}
+
+// editKey handles the profile editor overlay's keys.
+func (m *model) editKey(msg tea.KeyMsg) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.pop, m.popBody = "", nil
+		m.editName, m.editSkills = "", nil
+		m.editField, m.editLine = 0, ""
+	case "tab", "enter":
+		if m.editField == 0 {
+			// commit the name, move to skills
+			m.editName = strings.TrimSpace(m.editLine)
+			m.editField = 1
+			m.editLine = strings.Join(m.editSkills, " ")
+		} else if key == "tab" {
+			// commit skills, back to the name
+			m.commitLine()
+			m.editField = 0
+			m.editLine = m.editName
+		} else {
+			// enter commits and saves
+			m.commitLine()
+			m.saveEdit()
+			return
+		}
+	case "backspace":
+		if r := []rune(m.editLine); len(r) > 0 {
+			m.editLine = string(r[:len(r)-1])
+		}
+	default:
+		if len(msg.Runes) > 0 {
+			m.editLine += string(msg.Runes)
+		}
+	}
+	m.popBody = m.editBody()
+}
+
+// commitLine parses whatever is in the focused field back into the model.
+func (m *model) commitLine() {
+	switch m.editField {
+	case 0:
+		m.editName = strings.TrimSpace(m.editLine)
+	case 1:
+		m.editSkills = strings.Fields(strings.ReplaceAll(m.editLine, ",", " "))
+	}
+}
+
+// saveEdit writes the profile to profiles.json and rebuilds the screen.
+func (m *model) saveEdit() {
+	name := m.editName
+	if name == "" {
+		m.popBody = append(m.editBody(), "", ui.warn.Render("a profile needs a name"))
+		return
+	}
+	if len(m.editSkills) == 0 {
+		m.popBody = append(m.editBody(), "", ui.warn.Render("a profile needs at least one skill"))
+		return
+	}
+	skillsDir := filepath.Join(m.cfg.Repo, "skills")
+	for _, s := range m.editSkills {
+		if !isSkill(skillsDir, s) {
+			m.popBody = append(m.editBody(), "", ui.warn.Render(s+" isn't a skill in this repo"))
+			return
+		}
+	}
+	m.profiles[name] = profile{Description: m.profiles[name].Description, Skills: m.editSkills}
+	if err := saveProfiles(m.cfg.Repo, m.profiles); err != nil {
+		m.popBody = append(m.editBody(), "", ui.warn.Render(err.Error()))
+		return
+	}
+	m.cascade = "saved profile " + name
+	m.pop, m.popBody = "", nil
+	m.editName, m.editSkills = "", nil
+	m.build()
+}
+
+func (m *model) deleteProfile(name string) {
+	if _, ok := m.profiles[name]; !ok {
+		return
+	}
+	// A skill removal is only destructive to the selection, never the selection's
+	// skills, so deleting a profile definition leaves whichever skills it pulled in
+	// enabled; only the profile membership record goes.
+	delete(m.profiles, name)
+	if at := slices.Index(m.cfg.Profiles, name); at >= 0 {
+		m.cfg.Profiles = slices.Delete(m.cfg.Profiles, at, at+1)
+	}
+	if err := saveProfiles(m.cfg.Repo, m.profiles); err != nil {
+		m.cascade = "can't save profiles.json: " + err.Error()
+		return
+	}
+	m.cascade = "removed profile " + name
+	m.dirty = m.pending() != ""
+	m.build()
+}
+
+func (m *model) toggleProfile(name string) bool {
+	p, exists := m.profiles[name]
+	if slices.Contains(m.cfg.Profiles, name) {
+		removed, _ := disableProfile(m.cfg, name, p, m.profiles, m.deps)
+		m.cascade = name + " off"
+		if len(removed) == 0 {
+			m.cascade += " — direct, shared and required skills stay on"
+		}
+		return true
+	}
+	if !exists {
+		m.cascade = "can't enable " + name + ": its profile definition is missing"
+		return false
+	}
+	if _, _, err := enableProfile(m.cfg, name, p, m.deps, filepath.Join(m.cfg.Repo, "skills")); err != nil {
+		m.cascade = "can't enable " + name + ": " + err.Error()
+		return false
+	}
+	m.cascade = name + " on"
 	return true
 }
 

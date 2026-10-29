@@ -66,7 +66,7 @@ func (m *model) View() string {
 func (m *model) topLine() string {
 	on, total := 0, 0
 	for _, r := range m.rows {
-		if r.kind != rowSkill {
+		if r.kind != rowSkill || isProfileGroup(r.src) {
 			continue
 		}
 		total++
@@ -74,7 +74,11 @@ func (m *model) topLine() string {
 			on++
 		}
 	}
-	stats := fmt.Sprintf("%d/%d on  ·  ", on, total) + plural(len(m.cfg.Targets), "target")
+	stats := fmt.Sprintf("%d/%d on", on, total)
+	if len(m.profileNames()) > 0 {
+		stats += "  ·  " + plural(len(m.cfg.Profiles), "profile")
+	}
+	stats += "  ·  " + plural(len(m.cfg.Targets), "target")
 	if m.status != "" {
 		stats += "  ·  " + m.status
 	}
@@ -190,6 +194,17 @@ func (m *model) firstColumn(width int) ([]string, int, []int) {
 				shown = ui.text.Bold(true).Render(name) // the source the middle column is on
 			}
 			styled, nth = ui.rule(nth)+" "+shown+gap+ui.dim.Render(tally), nth+1
+		case rowProfile:
+			on, total := m.profileCounts(r.name)
+			tally := fmt.Sprintf("%d/%d", on, total)
+			name := trunc(r.name, width-7-lipgloss.Width(tally))
+			gap := strings.Repeat(" ", max(1, width-6-lipgloss.Width(name)-lipgloss.Width(tally)))
+			glyph, box, shown := boxOff, ui.dim.Render(boxOff), ui.dim.Render(name)
+			if slices.Contains(m.cfg.Profiles, r.name) {
+				glyph, box, shown = boxOn, ui.ok.Render(boxOn), ui.text.Render(name)
+			}
+			plain = "  " + glyph + " " + name + gap + tally
+			styled = "  " + box + " " + shown + gap + ui.dim.Render(tally)
 		case rowTarget:
 			name := trunc(r.name, width-6) // two in, the box, and the space after it
 			glyph, box, shown := boxOff, ui.dim.Render(boxOff), ui.dim.Render(name)
@@ -244,6 +259,9 @@ func (m *model) skillColumn(width int, inline bool) ([]string, int, []int) {
 	head := ui.dim.Render("SKILLS")
 	if s, ok := m.sources[m.source]; ok && s.Repo != "" && m.filter == "" {
 		head += ui.dim.Render("  " + trunc(trimScheme(s.Repo), width-10))
+	}
+	if name, ok := profileName(m.source); ok && m.filter == "" {
+		head += ui.dim.Render("  " + trunc(name, width-10))
 	}
 	if m.filter != "" {
 		head = ui.dim.Render("SKILLS  matching ") + ui.text.Render(trunc(m.filter, width-18))
@@ -312,6 +330,21 @@ func (m *model) counts(src string) (on, total int) {
 		}
 		total++
 		if slices.Contains(m.cfg.Enabled, s) {
+			on++
+		}
+	}
+	return on, total
+}
+
+func (m *model) profileCounts(name string) (on, total int) {
+	seen := map[string]bool{}
+	for _, skill := range m.profiles[name].Skills {
+		if seen[skill] {
+			continue
+		}
+		seen[skill] = true
+		total++
+		if slices.Contains(m.cfg.Enabled, skill) {
 			on++
 		}
 	}
@@ -458,6 +491,31 @@ func (m *model) detail(width int) []string {
 				ui.label.Render("branch     ") + s.Ref + "\n" +
 				ui.label.Render("path       ") + s.Path
 		}
+	case rowProfile:
+		state := ui.dim.Render(boxOff + " off")
+		if slices.Contains(m.cfg.Profiles, r.name) {
+			state = ui.ok.Render(boxOn + " on")
+		}
+		body = ui.text.Bold(true).Render(r.name) + "\n" + state + "\n"
+		if desc := m.profiles[r.name].Description; desc != "" {
+			body += "\n" + ui.dim.Render(desc) + "\n"
+		}
+		on, total := m.profileCounts(r.name)
+		body += "\n" + ui.label.Render("skills     ") + fmt.Sprintf("%d/%d on", on, total)
+		var missing []string
+		for _, skill := range m.profiles[r.name].Skills {
+			if !isSkill(filepath.Join(m.cfg.Repo, "skills"), skill) {
+				missing = append(missing, skill)
+			}
+		}
+		if len(missing) > 0 {
+			body += "\n" + ui.label.Render("missing    ") + strings.Join(missing, ", ")
+		}
+		if r.note == "missing" {
+			body += "\n\n" + ui.dim.Render("definition removed; space clears it from this machine")
+		} else {
+			body += "\n\n" + ui.dim.Render("space merges the profile; turning it off keeps direct, shared and required skills")
+		}
 	case rowSkill:
 		body = m.skillDetail(r)
 	default:
@@ -473,7 +531,11 @@ func (m *model) skillDetail(r row) string {
 	if slices.Contains(m.cfg.Enabled, r.name) {
 		state = ui.ok.Render(boxOn + " enabled")
 	}
-	b.WriteString(ui.text.Bold(true).Render(r.name) + "\n" + state + ui.dim.Render("  ·  "+r.src))
+	context := r.src
+	if name, ok := profileName(r.src); ok {
+		context = "profile " + name
+	}
+	b.WriteString(ui.text.Bold(true).Render(r.name) + "\n" + state + ui.dim.Render("  ·  "+context))
 	if r.note == "new" {
 		b.WriteString("  " + ui.badge.Render(" new "))
 	}
