@@ -3,6 +3,22 @@
 Changes to `skillset` and to the skills this repo ships. Each release's commit list is on
 its [GitHub release](https://github.com/dhruvsaxena1998/skills/releases).
 
+## Unreleased
+
+### Added
+
+- Named skill profiles in an optional `profiles.json`. `enable` merges profiles
+  cumulatively; `disable` turns the profile's skills off except those another enabled
+  profile lists or a remaining skill requires. The
+  selection screen has a Profiles section with member navigation and the same review flow.
+- `skillset profile` (ls, show, add, set, rm) edits `profiles.json` from the command line.
+  Names must be reachable by `enable`, unknown skills are all named with suggestions, and
+  `rm <name> <skill>...` drops single members. Editing or deleting a profile that is on
+  here brings this machine's selection along.
+- The selection screen creates profiles with `n` and edits or renames them with `e` (name,
+  description, and a skills checklist) and deletes them with `d`, confirmed and applied on save.
+- A repo without `profiles.json` works as before; the first profile write creates it.
+
 ## v0.1.6 — 2026-10-28
 
 ### Added

@@ -1,0 +1,37 @@
+{
+  "frontend": {
+    "description": "Design and build frontend interfaces",
+    "skills": [
+      "impeccable",
+      "prototype",
+      "taste-skill",
+      "typescript-best-practices"
+    ]
+  },
+  "global": {
+    "description": "Everyday engineering: planning, specs, debugging, reviews and writing",
+    "skills": [
+      "blast-radius",
+      "caveman",
+      "caveman-commit",
+      "codebase-design",
+      "diagnosing-bugs",
+      "domain-modeling",
+      "grill-with-docs",
+      "grilling",
+      "handoff",
+      "how",
+      "implement-spec",
+      "ponytail",
+      "pr",
+      "prototype",
+      "research",
+      "tdd",
+      "technical-writing",
+      "to-spec",
+      "to-tickets",
+      "unslop",
+      "why"
+    ]
+  }
+}

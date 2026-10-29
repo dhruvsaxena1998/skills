@@ -8,6 +8,7 @@ The agent skills I use, collected from several upstream repos, with room for my 
 ```text
 skills/<name>/SKILL.md   every skill, flat, whatever its source
 sources.json             which skills to take from which upstream, and how they depend on each other
+profiles.json            optional named groups of skills to enable together
 hooks/                   vendored hook scripts, plus hooks.json (mine) registering them
 agents/                  vendored subagents, linked while the skill that ships them is enabled
 src/hooks/               caveman's hook scripts, vendored where its scripts expect them
@@ -47,7 +48,7 @@ skillset init ~/skills   # or name the clone, e.g. after moving it
 `init` walks up from the working directory looking for a clone and offers to clone one into
 `~/skills` if it finds none. It saves the path in `~/.config/skillset/config.json`
 (`%USERPROFILE%\.config\skillset\config.json` on Windows) along with this machine's enabled
-targets, enabled skills, and the skills it has already seen. That file is outside the repo
+targets, enabled skills, enabled profiles, and the skills it has already seen. That file is outside the repo
 and is never committed, so switching a skill on or off creates no commit.
 
 The first `init` on a machine adopts the skills already linked there as its selection, so
@@ -112,15 +113,17 @@ Two things point at this repo whatever repo you link from:
 
 ## The selection screen
 
-Running `skillset` with no arguments opens it. The left column lists the sources, the
+Running `skillset` with no arguments opens it. The left column lists the sources, profiles,
 targets, and anything in an agent folder that this repo didn't put there; the middle column
-lists the selected source's skills; the right pane shows the skill under the cursor — its
-description, source, dependencies, dependents and local patch commits. New skills since the
-last run are marked, and stay off until you turn them on.
+lists the selected source or profile's skills; the right pane shows the row under the cursor —
+its description, source, dependencies, dependents and local patch commits. New skills since
+the last run are marked, and stay off until you turn them on.
 
 Toggling a skill applies the dependency rules and says what it dragged along: enabling pulls
 in what the skill requires, disabling unchecks the skills that require it, and a skill left
-without one of its optional dependencies keeps a warning on screen.
+without one of its optional dependencies keeps a warning on screen. A profile's checkbox
+shows whether that profile is enabled; its tally shows how many member skills are currently
+on, so individually toggled members never make the profile state ambiguous.
 
 `space` toggles, `/` filters, `enter` on a skill reads its SKILL.md, `s` reviews every link, unlink and hook change the selection
 would write, `enter` on that review saves and applies it, `p` pulls the repo, `u` runs
@@ -133,10 +136,11 @@ The screen's git actions are `git pull --ff-only` and sync's vendor commit and m
 ```text
 skillset                 open the selection screen
 skillset init [path]     remember the skills clone (clones one if there is none)
-skillset enable <skill>  turn a skill on here, with what it requires
-skillset disable <skill> turn it off, with the skills that require it
+skillset enable <skill|profile>  turn a skill on, or merge a profile in
+skillset disable <skill|profile> turn a skill or profile off
 skillset apply           link enabled skills, unlink the rest
 skillset sync <source>   pull a source's skills from upstream into this repo
+skillset profile ...     create, edit and delete profiles (ls, add, rm, set)
 skillset playbook        print the playbook (AGENTS.md) for setting up a skills repo
 skillset update          replace this binary with the latest release
 skillset version         print the version of this binary (--version, -v)
@@ -148,6 +152,81 @@ To start a skills repo of your own, hand it to your agent instead of copying the
 
 `enable` and `disable` change the selection without the screen, which is how agents and
 scripts change it. Neither one links anything; `apply` does that.
+
+### Profiles
+
+A repo can define named skill groups in `profiles.json`. The file is optional; without it,
+the commands and selection screen work as before.
+
+```json
+{
+  "writing": {
+    "description": "Draft and edit clear prose",
+    "skills": ["unslop", "technical-writing"]
+  },
+  "review": {
+    "skills": ["pr", "blast-radius", "unslop"]
+  }
+}
+```
+
+```sh
+skillset enable writing
+skillset enable review   # merges with writing; nothing is switched off
+skillset disable writing # turns writing's skills off; review keeps unslop on
+skillset apply
+```
+
+Enabling a profile adds its members and their requirements and records the profile as
+enabled. Enabling another profile is cumulative. Disabling a profile considers only its
+listed members and turns them off, even ones that were on before the profile. A member stays
+on only when another enabled profile lists it or a skill that stays on requires it. Requirements that are not listed
+members are left on, just as they are when an individual skill is disabled.
+
+A skill with the same name as a profile takes precedence. Use `profile:<name>` to select the
+profile explicitly, for example `skillset enable profile:writing`.
+
+### Managing profiles
+
+The `profile` command creates, edits and deletes profiles in `profiles.json`. Editing or
+deleting a profile that is enabled on this machine brings the selection along (new members
+on, dropped members off unless something else keeps them) and asks for `apply`; a profile
+that is off here changes only in the file.
+
+```sh
+skillset profile ls                                  # list profiles; * marks those on here
+skillset profile show writing                        # one profile, its skills on or off
+skillset profile add writing technical-writing unslop # create writing, or add to it
+skillset profile add writing --desc "clear prose"     # set or replace the description
+skillset profile set review pr blast-radius unslop    # replace review's members
+skillset profile rm review unslop                      # drop one skill from review
+skillset profile rm writing                            # turn writing off, then delete it
+```
+
+`add` creates the profile if it doesn't exist and merges any new members into it. `set`
+replaces the member list; given only `--desc`, it changes the description and keeps the
+members. `--desc=<text>` works too, and `--desc ""` clears it. Skill names must match their
+folders; an unknown name is refused before anything is written, and so is a profile left
+with no skills. A new profile's name can't match a skill, start with `-` or `profile:`, or
+contain spaces, so `skillset enable <name>` always reaches it. If a skill added later takes a
+profile's name, the skill wins for `enable`/`disable` and `profile:<name>` forces the
+profile. A repo without
+`profiles.json` works as before; the first `profile add` creates the file.
+
+In the selection screen, profiles have their own section. Move right to inspect or toggle
+individual members, left to return to the profile, and space on the profile to merge or
+remove the whole selection. `n` opens a blank editor for a new profile, wherever the cursor
+is; `e` edits the profile under the cursor (or the profile of the skill under it). The editor has name, description and skills fields: tab or enter
+moves on, ctrl+u clears a field and ctrl+w drops a word. Skills are a list, not text: out
+of focus it shows the chosen skills, and with focus it becomes a checklist of every skill,
+grouped by source, where space toggles, `/` filters and enter saves the profile. Changing the
+name renames the profile; a name already taken is refused. `d` asks, and a second `d` deletes the profile under
+the cursor; like `profile rm` it turns the profile and its skills off first (the skills stay
+in the repo, only the profile goes), and the delete waits for save,
+so discarding keeps it. Profile edits write `profiles.json` at once, and the quit prompt says
+so; the selection changes they cause still go through the review-and-save step.
+
+### Apply
 
 `apply` writes what the review shows: it links every enabled skill into every enabled
 target, removes the links that point into this repo for everything else, and leaves entries

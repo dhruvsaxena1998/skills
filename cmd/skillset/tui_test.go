@@ -60,6 +60,10 @@ func press(m *model, key string) tea.Cmd {
 		return m.key(tea.KeyMsg{Type: tea.KeyShiftTab})
 	case "enter":
 		return m.key(tea.KeyMsg{Type: tea.KeyEnter})
+	case "ctrl+u":
+		return m.key(tea.KeyMsg{Type: tea.KeyCtrlU})
+	case "ctrl+w":
+		return m.key(tea.KeyMsg{Type: tea.KeyCtrlW})
 	}
 	return m.key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
 }

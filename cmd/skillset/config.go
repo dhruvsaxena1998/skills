@@ -10,10 +10,11 @@ import (
 
 // Config is this machine's selection. It lives outside the repo and is never committed.
 type Config struct {
-	Repo    string   `json:"repo"`
-	Targets []string `json:"targets"`
-	Enabled []string `json:"enabled"`
-	Seen    []string `json:"seen"`
+	Repo     string   `json:"repo"`
+	Targets  []string `json:"targets"`
+	Enabled  []string `json:"enabled"`
+	Profiles []string `json:"profiles,omitempty"`
+	Seen     []string `json:"seen"`
 	// Theme picks the screen's look by name; empty, or a name that no longer
 	// exists, falls back to the default.
 	Theme string `json:"theme,omitempty"`
@@ -56,6 +57,7 @@ func (c *Config) save() error {
 	}
 	slices.Sort(c.Targets)
 	slices.Sort(c.Enabled)
+	slices.Sort(c.Profiles)
 	slices.Sort(c.Seen)
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {

@@ -21,9 +21,12 @@ type binding struct {
 }
 
 var bindings = []binding{
-	{"selection", "space · x", "turn a skill, a source or a target on or off", "space toggle"},
+	{"selection", "space · x", "turn a skill, profile, source or target on or off", "space toggle"},
+	{"selection", "n", "create a new profile: name, description, and a checklist of skills", "n new profile"},
+	{"selection", "e", "edit or rename the profile under the cursor", "e edit profile"},
+	{"selection", "d", "delete the profile under the cursor (press twice; applied on save)", "d delete"},
 	{"selection", "↑ ↓ · k j", "move inside a column", ""},
-	{"selection", "← → · h l", "on the skills step, between the sources and their skills", "←→ columns"},
+	{"selection", "← → · h l", "on the skills step, between a source or profile and its skills", "←→ columns"},
 	{"selection", "enter", "read the skill's SKILL.md", ""},
 	{"selection", "tab", "the next step: targets, then the review", "tab next step"},
 	{"selection", "shift+tab", "the step before", "shift+tab back"},
@@ -165,9 +168,16 @@ func pick(label string, on bool) string {
 func (m *model) setTheme(name string) {
 	m.cfg.Theme = name
 	useTheme(name)
+	m.writeSaved()
+}
+
+// writeSaved writes the config with the selection as of the last save, for the
+// settings that take effect at once without saving the pending toggles.
+func (m *model) writeSaved() {
 	c := *m.cfg
 	// clones, because save sorts in place and must not reorder the saved selection
-	c.Enabled, c.Targets = slices.Clone(m.savedOn), slices.Clone(m.savedTargets)
+	c.Enabled = slices.Clone(m.savedOn)
+	c.Profiles, c.Targets = slices.Clone(m.savedProfiles), slices.Clone(m.savedTargets)
 	if err := c.save(); err != nil {
 		m.status = err.Error()
 	}

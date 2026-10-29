@@ -19,3 +19,8 @@ archives:
 
 changelog:
   use: github
+
+release:
+  # A tag like v0.2.0-beta publishes as a pre-release, which GitHub keeps out of
+  # releases/latest, so `skillset update` never hands a beta to everyone.
+  prerelease: auto

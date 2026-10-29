@@ -24,19 +24,66 @@
     "deps": {
       "codebase-design": {},
       "diagnosing-bugs": {},
-      "domain-modeling": { "optional": ["unslop"] },
-      "grill-with-docs": { "requires": ["domain-modeling", "grilling"] },
+      "domain-modeling": {
+        "optional": [
+          "unslop"
+        ]
+      },
+      "grill-with-docs": {
+        "requires": [
+          "domain-modeling",
+          "grilling"
+        ]
+      },
       "grilling": {},
-      "handoff": { "optional": ["unslop"] },
-      "implement-spec": { "optional": ["setup-matt-pocock-skills", "tdd"] },
-      "pr": { "optional": ["blast-radius", "unslop"] },
+      "handoff": {
+        "optional": [
+          "unslop"
+        ]
+      },
+      "implement-spec": {
+        "optional": [
+          "setup-matt-pocock-skills",
+          "tdd"
+        ]
+      },
+      "pr": {
+        "optional": [
+          "blast-radius",
+          "unslop"
+        ]
+      },
       "prototype": {},
-      "research": { "optional": ["unslop"] },
+      "research": {
+        "optional": [
+          "unslop"
+        ]
+      },
       "setup-matt-pocock-skills": {},
-      "tdd": { "optional": ["codebase-design"] },
-      "to-questionnaire": { "optional": ["unslop"] },
-      "to-spec": { "optional": ["prototype", "setup-matt-pocock-skills", "unslop"] },
-      "to-tickets": { "optional": ["prototype", "setup-matt-pocock-skills", "unslop"] },
+      "tdd": {
+        "optional": [
+          "codebase-design"
+        ]
+      },
+      "to-questionnaire": {
+        "optional": [
+          "unslop"
+        ]
+      },
+      "to-spec": {
+        "optional": [
+          "prototype",
+          "setup-matt-pocock-skills",
+          "unslop"
+        ]
+      },
+      "to-tickets": {
+        "optional": [
+          "prototype",
+          "setup-matt-pocock-skills",
+          "unslop"
+        ]
+      },
       "wait-what": {}
     }
   },
@@ -58,13 +105,33 @@
     ],
     "deps": {
       "arena": {},
-      "blast-radius": { "optional": ["arena", "how", "unslop", "why"] },
+      "blast-radius": {
+        "optional": [
+          "arena",
+          "how",
+          "unslop",
+          "why"
+        ]
+      },
       "correct": {},
       "how": {},
       "principle-boundary-discipline": {},
-      "principle-type-system-discipline": { "requires": ["principle-boundary-discipline"] },
-      "technical-writing": { "optional": ["unslop"] },
-      "typescript-best-practices": { "requires": ["principle-boundary-discipline", "principle-type-system-discipline"] },
+      "principle-type-system-discipline": {
+        "requires": [
+          "principle-boundary-discipline"
+        ]
+      },
+      "technical-writing": {
+        "optional": [
+          "unslop"
+        ]
+      },
+      "typescript-best-practices": {
+        "requires": [
+          "principle-boundary-discipline",
+          "principle-type-system-discipline"
+        ]
+      },
       "unslop": {},
       "why": {}
     }
@@ -88,18 +155,40 @@
     ],
     "deps": {
       "ponytail": {},
-      "ponytail-audit": { "optional": ["ponytail"] },
-      "ponytail-debt": { "requires": ["ponytail"] },
-      "ponytail-gain": { "requires": ["ponytail"] },
-      "ponytail-help": { "requires": ["ponytail"] },
-      "ponytail-review": { "optional": ["ponytail"] }
+      "ponytail-audit": {
+        "optional": [
+          "ponytail"
+        ]
+      },
+      "ponytail-debt": {
+        "requires": [
+          "ponytail"
+        ]
+      },
+      "ponytail-gain": {
+        "requires": [
+          "ponytail"
+        ]
+      },
+      "ponytail-help": {
+        "requires": [
+          "ponytail"
+        ]
+      },
+      "ponytail-review": {
+        "optional": [
+          "ponytail"
+        ]
+      }
     }
   },
   "taste": {
     "repo": "https://github.com/Leonxlnx/taste-skill",
     "ref": "main",
     "path": "skills",
-    "skills": ["taste-skill"],
+    "skills": [
+      "taste-skill"
+    ],
     "deps": {
       "taste-skill": {}
     }
@@ -134,12 +223,27 @@
       "verify-and-stop"
     ],
     "deps": {
-      "cavecrew": { "agents": ["cavecrew-builder", "cavecrew-investigator", "cavecrew-reviewer"] },
-      "caveman": { "optional": ["megacave", "ultracave"] },
+      "cavecrew": {
+        "agents": [
+          "cavecrew-builder",
+          "cavecrew-investigator",
+          "cavecrew-reviewer"
+        ]
+      },
+      "caveman": {
+        "optional": [
+          "megacave",
+          "ultracave"
+        ]
+      },
       "caveman-commit": {},
       "caveman-compress": {},
       "caveman-explore": {},
-      "caveman-help": { "optional": ["caveman"] },
+      "caveman-help": {
+        "optional": [
+          "caveman"
+        ]
+      },
       "caveman-review": {},
       "caveman-stats": {},
       "investigate-first": {},
@@ -150,6 +254,24 @@
       "surgical-patch": {},
       "ultracave": {},
       "verify-and-stop": {}
+    }
+  },
+  "impeccable": {
+    "repo": "https://github.com/pbakaus/impeccable",
+    "ref": "main",
+    "path": "plugin/skills",
+    "skills": [
+      "impeccable"
+    ],
+    "deps": {
+      "impeccable": {
+        "agents": [
+          "impeccable-asset-producer",
+          "impeccable-documenter",
+          "impeccable-finish-reviewer",
+          "impeccable-manual-edit-applier"
+        ]
+      }
     }
   }
 }

@@ -8,6 +8,23 @@
     {
       "skill": "caveman",
       "hooks": [{ "type": "command", "command": "node \"{{ROOT}}/src/hooks/caveman-activate.js\"", "timeout": 30, "statusMessage": "Loading caveman mode..." }]
+    },
+    {
+      "skill": "impeccable",
+      "hooks": [{ "type": "command", "command": "[ ! -f \"{{ROOT}}/skills/impeccable/scripts/impeccable\" ] || \"{{ROOT}}/skills/impeccable/scripts/impeccable\" hook", "timeout": 5, "statusMessage": "Preparing build session" }]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "skill": "impeccable",
+      "matcher": "Edit|Write",
+      "hooks": [{ "type": "command", "command": "[ ! -f \"{{ROOT}}/skills/impeccable/scripts/impeccable\" ] || \"{{ROOT}}/skills/impeccable/scripts/impeccable\" hook", "timeout": 5, "statusMessage": "Checking UI changes" }]
+    }
+  ],
+  "Stop": [
+    {
+      "skill": "impeccable",
+      "hooks": [{ "type": "command", "command": "[ ! -f \"{{ROOT}}/skills/impeccable/scripts/impeccable\" ] || \"{{ROOT}}/skills/impeccable/scripts/impeccable\" hook", "timeout": 30, "statusMessage": "Design deep pass" }]
     }
   ],
   "SubagentStart": [
