@@ -291,9 +291,9 @@ The selection screen shows profiles in their own section. Space merges or remove
 and the middle column carries the same member skills with navigation back and forth. `n`
 opens a blank editor for a new profile, and `e` edits the profile under the cursor; both work
 on the skills step, with name, description and skills fields; tab and enter move between them, enter on
-skills saves, and the CLI's name and member rules apply. Space on the skills field opens a
-checklist of every skill, members checked: space toggles, `/` filters, enter keeps the
-choice and esc drops it. Changing the name renames the
+skills saves, and the CLI's name and member rules apply. The skills field is a list: the
+chosen skills out of focus, a checklist of every skill with focus, where space toggles and
+`/` filters. Changing the name renames the
 profile, including this machine's record of it. `d`
 asks, and a second `d` deletes the profile under the cursor: it turns the profile and its
 skills off (the skills stay in the repo; only the profile goes) and

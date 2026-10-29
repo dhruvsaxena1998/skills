@@ -107,11 +107,9 @@ type model struct {
 	editField  int
 	editedDisk bool // a profile edit has been written to profiles.json this session
 
-	// the skills checklist the editor opens: every skill in the main screen's
-	// order, the checked ones, the cursor, and a filter typed after /
-	picking    bool
+	// the skills checklist the editor shows while its skills field has focus:
+	// every skill in the main screen's order, the cursor, and a filter typed after /
 	pickAll    []row
-	pickOn     map[string]bool
 	pickAt     int
 	pickFilter string
 	pickTyping bool
@@ -993,44 +991,32 @@ func (m *model) openEdit(r row) {
 			m.edit = [3]string{name, p.Description, strings.Join(p.Skills, " ")}
 		}
 	}
-	m.pop, m.popTop = profileEdit, 0
-	m.popBody = m.editBody()
-}
-
-// editBody renders the editor, the focused field at full contrast with the
-// typing bar after it.
-func (m *model) editBody() []string {
-	title := "new profile"
-	if m.editOrig != "" {
-		title = "edit profile " + m.editOrig
-	}
-	out := []string{
-		ui.text.Bold(true).Render(title) + ui.dim.Render("  ·  tab/enter next field, enter on skills saves  ·  ctrl+u clears  ·  esc cancels"),
-		"",
-	}
-	for i, label := range []string{"name        ", "description ", "skills      "} {
-		value := ui.dim.Render(m.edit[i])
-		if i == m.editField {
-			value = ui.text.Render(m.edit[i]) + ui.bar.Render(" ") + ui.label.Render("◂")
-		}
-		out = append(out, ui.label.Render(label)+value)
-	}
-	return append(out, "", ui.dim.Render("on skills, space opens a checklist; or type folder names separated by spaces"))
-}
-
-// openPicker shows the checklist with the skills field's members checked.
-func (m *model) openPicker() {
-	m.pickAll, m.pickOn = nil, map[string]bool{}
+	m.pickAll = nil
 	for _, r := range m.rows {
 		if r.kind == rowSkill && !isProfileGroup(r.src) {
 			m.pickAll = append(m.pickAll, r)
 		}
 	}
-	for _, name := range strings.Fields(strings.ReplaceAll(m.edit[fieldSkills], ",", " ")) {
-		m.pickOn[name] = true
+	m.pickAt, m.pickFilter, m.pickTyping = 0, "", false
+	m.pop, m.popTop = profileEdit, 0
+	m.popBody = m.editBody()
+}
+
+// members is the skills field as a list. edit[fieldSkills] keeps it as one
+// string so a save reads one place, whatever filled it.
+func (m *model) members() []string {
+	return strings.Fields(m.edit[fieldSkills])
+}
+
+// toggleMember checks or unchecks a skill in the skills field.
+func (m *model) toggleMember(name string) {
+	list := m.members()
+	if at := slices.Index(list, name); at >= 0 {
+		list = slices.Delete(list, at, at+1)
+	} else {
+		list = append(list, name)
 	}
-	m.picking, m.pickAt, m.pickFilter, m.pickTyping, m.popTop = true, 0, "", false, 0
-	m.popBody = m.pickBody()
+	m.edit[fieldSkills] = strings.Join(list, " ")
 }
 
 // pickShown is the checklist after the filter.
@@ -1041,46 +1027,77 @@ func (m *model) pickShown() []row {
 	})
 }
 
-func (m *model) pickBody() []string {
-	head := ui.text.Bold(true).Render("pick skills") + ui.dim.Render("  ·  space toggles  ·  / filters  ·  enter keeps  ·  esc drops changes")
-	out := []string{head}
+// editBody renders the editor. Name and description are text fields; skills is a
+// list: the chosen ones while it is out of focus, and a checklist of every skill,
+// grouped like the main screen, while it has focus.
+func (m *model) editBody() []string {
+	title := "new profile"
+	if m.editOrig != "" {
+		title = "edit profile " + m.editOrig
+	}
+	hint := "tab/enter next field  ·  ctrl+u clears  ·  esc cancels"
+	if m.editField == fieldSkills {
+		hint = "space toggles  ·  / filters  ·  enter saves  ·  tab next field  ·  esc cancels"
+	}
+	out := []string{ui.text.Bold(true).Render(title), ui.dim.Render(hint), ""}
+	for i, label := range []string{"name        ", "description "} {
+		value := ui.dim.Render(m.edit[i])
+		if i == m.editField {
+			value = ui.text.Render(m.edit[i]) + ui.bar.Render(" ") + ui.label.Render("◂")
+		}
+		out = append(out, ui.label.Render(label)+value)
+	}
+
+	members := m.members()
+	heading := ui.label.Render("skills      ") + ui.dim.Render(plural(len(members), "skill")+" picked")
+	if m.editField == fieldSkills {
+		heading += ui.label.Render("  ◂")
+	}
+	out = append(out, "", heading)
+	m.pickLine = -1
+	if m.editField != fieldSkills {
+		if len(members) == 0 {
+			return append(out, ui.dim.Render("  none yet: tab here, then space picks skills"))
+		}
+		for _, name := range sortedUnique(members) {
+			out = append(out, "  "+ui.ok.Render(boxOn)+" "+ui.text.Render(name))
+		}
+		return out
+	}
+
 	if m.pickFilter != "" || m.pickTyping {
-		filter := ui.label.Render("filter ") + ui.text.Render(m.pickFilter)
+		filter := "  " + ui.label.Render("filter ") + ui.text.Render(m.pickFilter)
 		if m.pickTyping {
 			filter += ui.bar.Render(" ")
 		}
 		out = append(out, filter)
 	}
-	empty := len(out)
-	group := ""
-	m.pickLine = -1
+	empty, group := len(out), ""
 	for i, r := range m.pickShown() {
 		if r.src != group {
 			group = r.src
-			out = append(out, ui.label.Render(strings.ToUpper(group)))
+			out = append(out, "  "+ui.label.Render(strings.ToUpper(group)))
 		}
 		box, name := ui.dim.Render(boxOff), ui.dim.Render(r.name)
-		if m.pickOn[r.name] {
+		if slices.Contains(members, r.name) {
 			box, name = ui.ok.Render(boxOn), ui.text.Render(r.name)
 		}
-		cursor := "  "
+		cursor := "    "
 		if i == m.pickAt {
-			cursor, m.pickLine = ui.label.Render("▸ "), len(out)
+			cursor, m.pickLine = "  "+ui.label.Render("▸ "), len(out)
 		}
 		out = append(out, cursor+box+" "+name)
 	}
 	if len(out) == empty {
-		out = append(out, ui.dim.Render("  no skill matches"))
+		out = append(out, ui.dim.Render("    no skill matches"))
 	}
 	return out
 }
 
-// pickKey drives the checklist. enter hands the checked skills back to the
-// editor's skills field; esc returns without them.
-func (m *model) pickKey(msg tea.KeyMsg) {
-	shown := m.pickShown()
+// editKey handles the profile editor overlay's keys.
+func (m *model) editKey(msg tea.KeyMsg) {
 	key := msg.String()
-	if m.pickTyping {
+	if m.editField == fieldSkills && m.pickTyping {
 		switch key {
 		case "enter", "esc":
 			m.pickTyping = false
@@ -1094,52 +1111,10 @@ func (m *model) pickKey(msg tea.KeyMsg) {
 			m.pickFilter += string(msg.Runes)
 		}
 		m.pickAt = 0
-		m.popBody = m.pickBody()
+		m.popBody = m.editBody()
 		return
 	}
 	switch key {
-	case "esc":
-		m.picking = false
-		m.popBody = m.editBody()
-		return
-	case "enter":
-		var members []string
-		for _, r := range m.pickAll {
-			if m.pickOn[r.name] && !slices.Contains(members, r.name) {
-				members = append(members, r.name)
-			}
-		}
-		m.edit[fieldSkills] = strings.Join(members, " ")
-		m.picking = false
-		m.popBody = m.editBody()
-		return
-	case "/":
-		m.pickTyping = true
-	case "up", "k":
-		m.pickAt = max(m.pickAt-1, 0)
-	case "down", "j":
-		m.pickAt = min(m.pickAt+1, max(len(shown)-1, 0))
-	case " ", "x":
-		if m.pickAt < len(shown) {
-			name := shown[m.pickAt].name
-			m.pickOn[name] = !m.pickOn[name]
-		}
-	}
-	m.popBody = m.pickBody()
-}
-
-// editKey handles the profile editor overlay's keys.
-func (m *model) editKey(msg tea.KeyMsg) {
-	if m.picking {
-		m.pickKey(msg)
-		return
-	}
-	f := &m.edit[m.editField]
-	if m.editField == fieldSkills && (msg.String() == " " || msg.String() == "x") {
-		m.openPicker()
-		return
-	}
-	switch msg.String() {
 	case "esc":
 		m.pop, m.popBody = "", nil
 		return
@@ -1153,6 +1128,37 @@ func (m *model) editKey(msg tea.KeyMsg) {
 		m.editField = (m.editField + 1) % len(m.edit)
 	case "shift+tab":
 		m.editField = (m.editField + len(m.edit) - 1) % len(m.edit)
+	default:
+		if m.editField == fieldSkills {
+			m.listKey(key)
+		} else {
+			m.textKey(msg)
+		}
+	}
+	m.popBody = m.editBody()
+}
+
+// listKey moves through and toggles the skills checklist.
+func (m *model) listKey(key string) {
+	shown := m.pickShown()
+	switch key {
+	case "/":
+		m.pickTyping = true
+	case "up", "k":
+		m.pickAt = max(m.pickAt-1, 0)
+	case "down", "j":
+		m.pickAt = min(m.pickAt+1, max(len(shown)-1, 0))
+	case " ", "x":
+		if m.pickAt < len(shown) {
+			m.toggleMember(shown[m.pickAt].name)
+		}
+	}
+}
+
+// textKey types into the name or description field.
+func (m *model) textKey(msg tea.KeyMsg) {
+	f := &m.edit[m.editField]
+	switch msg.String() {
 	case "backspace":
 		if r := []rune(*f); len(r) > 0 {
 			*f = string(r[:len(r)-1])
@@ -1167,7 +1173,6 @@ func (m *model) editKey(msg tea.KeyMsg) {
 			*f += string(msg.Runes)
 		}
 	}
-	m.popBody = m.editBody()
 }
 
 // editError keeps the editor open with the reason the save was refused.
@@ -1179,7 +1184,7 @@ func (m *model) editError(msg string) {
 // A rename moves the definition, and the machine's record of it, to the new name.
 func (m *model) saveEdit() {
 	name := strings.TrimSpace(m.edit[fieldName])
-	members := strings.Fields(strings.ReplaceAll(m.edit[fieldSkills], ",", " "))
+	members := m.members()
 	skillsDir := filepath.Join(m.cfg.Repo, "skills")
 	if name != m.editOrig {
 		if _, taken := m.profiles[name]; taken {

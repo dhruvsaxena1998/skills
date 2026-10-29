@@ -217,9 +217,9 @@ In the selection screen, profiles have their own section. Move right to inspect 
 individual members, left to return to the profile, and space on the profile to merge or
 remove the whole selection. `n` opens a blank editor for a new profile, wherever the cursor
 is; `e` edits the profile under the cursor (or the profile of the skill under it). The editor has name, description and skills fields: tab or enter
-moves on, enter on skills saves, ctrl+u clears a field and ctrl+w drops a word. Space on the
-skills field opens a checklist of every skill with the members checked: space toggles, `/`
-filters, enter keeps the choice, esc drops it. Changing the
+moves on, ctrl+u clears a field and ctrl+w drops a word. Skills are a list, not text: out
+of focus it shows the chosen skills, and with focus it becomes a checklist of every skill,
+grouped by source, where space toggles, `/` filters and enter saves the profile. Changing the
 name renames the profile; a name already taken is refused. `d` asks, and a second `d` deletes the profile under
 the cursor; like `profile rm` it turns the profile and its skills off first (the skills stay
 in the repo, only the profile goes), and the delete waits for save,

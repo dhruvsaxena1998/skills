@@ -648,7 +648,7 @@ func TestTUIProfileCountSkipsMissingMembers(t *testing.T) {
 	}
 }
 
-func TestTUIEditorChecklistPicksMembers(t *testing.T) {
+func TestTUIEditorSkillsAreAList(t *testing.T) {
 	m, _, repo := tuiModel(t)
 	write(t, filepath.Join(repo, "profiles.json"), `{"work": {"skills": ["nice"]}}`)
 	if err := m.reload(); err != nil {
@@ -656,35 +656,31 @@ func TestTUIEditorChecklistPicksMembers(t *testing.T) {
 	}
 	goTo(t, m, "work")
 	press(m, "e")
-	m.editField = fieldSkills
-	press(m, " ")
-	if !m.picking || !m.pickOn["nice"] {
-		t.Fatalf("space on skills should open the checklist with nice checked")
+
+	// out of focus: the members one per line, not a text field
+	body := strings.Join(m.popBody, "\n")
+	if !strings.Contains(body, "1 skill picked") || !strings.Contains(body, boxOn+" nice") {
+		t.Fatalf("editor should list the members:\n%s", body)
+	}
+
+	press(m, "tab")
+	press(m, "tab") // skills: the checklist of every skill
+	body = strings.Join(m.popBody, "\n")
+	if !strings.Contains(body, boxOff+" base") || !strings.Contains(body, boxOn+" nice") {
+		t.Fatalf("focused skills should show every skill checked or not:\n%s", body)
 	}
 	press(m, "/")
 	for _, r := range "bas" {
 		press(m, string(r))
 	}
-	press(m, "enter") // ends the filter
-	if shown := m.pickShown(); len(shown) != 1 || shown[0].name != "base" {
-		t.Fatalf("filter shows %v, want base", shown)
+	press(m, "enter") // ends the filter, not the editor
+	if shown := m.pickShown(); len(shown) != 1 || shown[0].name != "base" || m.pop != profileEdit {
+		t.Fatalf("filter shows %v, pop %q", shown, m.pop)
 	}
 	press(m, " ") // check base
 	press(m, "enter")
-	if m.picking || m.edit[fieldSkills] != "base nice" && m.edit[fieldSkills] != "nice base" {
-		t.Fatalf("skills field = %q, want base and nice", m.edit[fieldSkills])
-	}
-
-	// esc drops the checklist's changes
-	press(m, " ")
-	press(m, " ") // toggles the first skill
-	press(m, "esc")
-	if !strings.Contains(m.edit[fieldSkills], "base") || !strings.Contains(m.edit[fieldSkills], "nice") {
-		t.Fatalf("esc should keep the field as it was, got %q", m.edit[fieldSkills])
-	}
-	press(m, "enter") // saves
 	if got, _ := loadProfiles(repo); !slices.Equal(got["work"].Skills, []string{"base", "nice"}) {
-		t.Fatalf("work = %v", got["work"].Skills)
+		t.Fatalf("work = %v, want base added", got["work"].Skills)
 	}
 }
 

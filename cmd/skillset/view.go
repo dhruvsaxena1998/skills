@@ -400,7 +400,7 @@ func (m *model) rail() []string {
 // the same window the columns use.
 func (m *model) popupPane(h int) string {
 	w, sel := m.popWidth(), -1
-	if m.pop == profileEdit && m.picking {
+	if m.pop == profileEdit && m.editField == fieldSkills {
 		sel = m.pickLine // keep the checklist's cursor on screen
 	}
 	return lipgloss.NewStyle().MarginLeft(2).
