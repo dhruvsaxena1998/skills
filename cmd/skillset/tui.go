@@ -1259,15 +1259,15 @@ func (m *model) deleteProfile(name string) {
 	if m.deleting != name {
 		m.clear()
 		m.deleting = name
-		m.cascade = "d again deletes profile " + name + " when you save; its own skills go off with it"
+		m.cascade = "press d again to delete profile " + name + " on save: its skills are turned off, not removed from the repo"
 		return
 	}
 	removed := removeProfile(m.cfg, name, m.profiles, m.deps)
 	m.deleted = append(m.deleted, name)
 	m.clear()
-	m.cascade = "deleted profile " + name
+	m.cascade = "profile " + name + " deleted on save"
 	if len(removed) > 0 {
-		m.cascade += ": " + strings.Join(removed, ", ") + " off"
+		m.cascade += "  ·  turned off: " + strings.Join(removed, ", ")
 	}
 	m.dirty = m.pending() != ""
 	m.build()

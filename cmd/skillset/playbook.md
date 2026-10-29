@@ -297,7 +297,8 @@ skills saves, and the CLI's name and member rules apply. Space on the skills fie
 checklist of every skill, members checked: space toggles, `/` filters, enter keeps the
 choice and esc drops it. Changing the name renames the
 profile, including this machine's record of it. `d`
-asks, and a second `d` deletes the profile under the cursor: it turns the profile off and
+asks, and a second `d` deletes the profile under the cursor: it turns the profile and its
+skills off (the skills stay in the repo; only the profile goes) and
 joins the pending review, so save removes it from `profiles.json` and discarding keeps it. A
 profile edit writes `profiles.json` at once; selection changes join the same pending review
 as skill and target changes, and nothing links until save.
@@ -327,7 +328,7 @@ spaces, so `skillset enable <name>` always reaches it. A repo with no `profiles.
 before, and the first `profile add` creates the file. `rm` first turns the profile off on
 this machine with the same rules as `disable`, so no skill is left that no profile can turn
 off. Changing the members of a profile that is enabled on this machine keeps the selection
-in step the same way: new members come on with their requirements, and dropped ones go off
+in step the same way: new members come on with their requirements, and dropped ones turn off
 unless selected directly, shared with another enabled profile, or required. The command then
 says so and asks for `skillset apply`. Editing a profile that is off here changes only
 `profiles.json`.

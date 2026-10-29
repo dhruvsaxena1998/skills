@@ -221,7 +221,8 @@ moves on, enter on skills saves, ctrl+u clears a field and ctrl+w drops a word. 
 skills field opens a checklist of every skill with the members checked: space toggles, `/`
 filters, enter keeps the choice, esc drops it. Changing the
 name renames the profile; a name already taken is refused. `d` asks, and a second `d` deletes the profile under
-the cursor; like `profile rm` it turns the profile off first, and the delete waits for save,
+the cursor; like `profile rm` it turns the profile and its skills off first (the skills stay
+in the repo, only the profile goes), and the delete waits for save,
 so discarding keeps it. Profile edits write `profiles.json` at once, and the quit prompt says
 so; the selection changes they cause still go through the review-and-save step.
 

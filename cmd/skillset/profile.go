@@ -52,7 +52,7 @@ const profileUsage = `skillset profile edits profiles.json, the repo's named gro
   skillset profile show <name>                          one profile and its skills' state
   skillset profile add <name> <skill>... [--desc <text>]  create a profile, or add skills to it
   skillset profile set <name> [<skill>...] [--desc <text>] replace its skills, or just the description
-  skillset profile rm <name>                            turn it off here, then delete it
+  skillset profile rm <name>                            turn it and its skills off, delete the profile
   skillset profile rm <name> <skill>...                 drop just those skills from it
 `
 
