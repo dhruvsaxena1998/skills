@@ -291,10 +291,11 @@ profile disable remove a pre-existing choice.
 
 The selection screen shows profiles in their own section. Space merges or removes a profile,
 and the middle column carries the same member skills with navigation back and forth. `n`
-opens the profile editor (empty to create, or the profile under the cursor to edit), and `d`
-deletes the profile under the cursor. A profile edit writes `profiles.json` at once;
-selection changes join the same pending review as skill and target changes, and nothing
-links until save.
+opens the profile editor (empty to create, or the profile under the cursor to edit). `d`
+asks, and a second `d` deletes the profile under the cursor: it turns the profile off and
+joins the pending review, so save removes it from `profiles.json` and discarding keeps it. A
+profile edit writes `profiles.json` at once; selection changes join the same pending review
+as skill and target changes, and nothing links until save.
 
 Editing is also on the command line, where agents and scripts change definitions:
 
@@ -311,7 +312,9 @@ anything is written, as is a profile left with no skills. `--desc` takes the res
 so a description with spaces needs no quoting; `--desc=<text>` works too and `--desc ""`
 clears it. A new profile's name can't match a skill, start with `-` or `profile:`, or contain
 spaces, so `skillset enable <name>` always reaches it. A repo with no `profiles.json` works as
-before, and the first `profile add` creates the file. These edit the repo's
+before, and the first `profile add` creates the file. `rm` first turns the profile off on
+this machine with the same rules as `disable`, so no skill is left that no profile can turn
+off. Apart from that, these edit the repo's
 `profiles.json`, never the machine selection, so they never need `skillset apply`.
 
 ## Hooks

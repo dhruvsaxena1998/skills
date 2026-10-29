@@ -83,6 +83,10 @@ type model struct {
 	status  string   // git position, or the result of the last action
 	dirty   bool     // there is something a save would write
 	asked   bool     // q pressed once with unsaved changes
+	// deleting is the profile a first d asked about; a second d on it deletes.
+	// deleted holds profiles whose definitions go from profiles.json on save.
+	deleting string
+	deleted  []string
 
 	// the selection as it was last written, so the rail can say what a save would
 	// change rather than only what the last toggle did
@@ -157,6 +161,9 @@ func (m *model) reload() error {
 	profiles, err := loadProfiles(m.cfg.Repo)
 	if err != nil {
 		return err
+	}
+	for _, name := range m.deleted {
+		delete(profiles, name) // still pending: a reload mustn't bring it back
 	}
 	m.sources, m.deps, m.profiles = sources, deps, profiles
 	m.desc, m.patches = map[string]string{}, map[string][]string{}
@@ -398,7 +405,7 @@ func (m *model) jumpGroup(name string) bool {
 
 // clear drops the rail's line once the cursor leaves the row it was about, and
 // the pending quit with it, so a q after wandering off still asks once.
-func (m *model) clear() { m.cascade, m.asked = "", false }
+func (m *model) clear() { m.cascade, m.asked, m.deleting = "", false, "" }
 
 // setStep moves to a step of the flow. The changes step is the review, which is
 // built fresh and sits over the step you opened it from.
@@ -777,6 +784,9 @@ func (m *model) openReview() {
 		return
 	}
 	m.review = lines(buf.String())
+	for _, name := range m.deleted {
+		m.review = append([]string{"delete profile " + name + " from profiles.json"}, m.review...)
+	}
 	if len(m.review) == 0 {
 		m.review = []string{"nothing to change"}
 	}
@@ -784,6 +794,13 @@ func (m *model) openReview() {
 
 // save applies the selection for real, through the same code as `skillset apply`.
 func (m *model) save() tea.Cmd {
+	if len(m.deleted) > 0 {
+		if err := saveProfiles(m.cfg.Repo, m.profiles); err != nil {
+			m.status = err.Error()
+			return nil
+		}
+		m.deleted = nil
+	}
 	var buf bytes.Buffer
 	if err := apply(m.cfg, &buf, false); err != nil {
 		m.status = err.Error()
@@ -862,6 +879,9 @@ func (m *model) pending() string {
 	}
 	if n := extra(m.savedProfiles, m.cfg.Profiles); n > 0 {
 		parts = append(parts, plural(n, "profile")+" off")
+	}
+	if n := len(m.deleted); n > 0 {
+		parts = append(parts, plural(n, "profile")+" deleted")
 	}
 	if n := extra(m.cfg.Targets, m.savedTargets) + extra(m.savedTargets, m.cfg.Targets); n > 0 {
 		parts = append(parts, plural(n, "target")+" changed")
@@ -1062,22 +1082,26 @@ func (m *model) saveEdit() {
 	m.build()
 }
 
+// deleteProfile asks once, then turns the profile off and marks its definition
+// for removal. Both join the pending review: save writes profiles.json with the
+// selection, and discarding brings the profile back.
 func (m *model) deleteProfile(name string) {
 	if _, ok := m.profiles[name]; !ok {
 		return
 	}
-	// A skill removal is only destructive to the selection, never the selection's
-	// skills, so deleting a profile definition leaves whichever skills it pulled in
-	// enabled; only the profile membership record goes.
-	delete(m.profiles, name)
-	if at := slices.Index(m.cfg.Profiles, name); at >= 0 {
-		m.cfg.Profiles = slices.Delete(m.cfg.Profiles, at, at+1)
-	}
-	if err := saveProfiles(m.cfg.Repo, m.profiles); err != nil {
-		m.cascade = "can't save profiles.json: " + err.Error()
+	if m.deleting != name {
+		m.clear()
+		m.deleting = name
+		m.cascade = "d again deletes profile " + name + " when you save; its own skills go off with it"
 		return
 	}
-	m.cascade = "removed profile " + name
+	removed := removeProfile(m.cfg, name, m.profiles, m.deps)
+	m.deleted = append(m.deleted, name)
+	m.clear()
+	m.cascade = "deleted profile " + name
+	if len(removed) > 0 {
+		m.cascade += ": " + strings.Join(removed, ", ") + " off"
+	}
 	m.dirty = m.pending() != ""
 	m.build()
 }

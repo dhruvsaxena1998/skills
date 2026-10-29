@@ -221,9 +221,17 @@ func TestTUIProfileEditCreatesAndDeletes(t *testing.T) {
 		t.Fatalf("create should add a profile, got:\n%s", got)
 	}
 
-	// delete a profile
+	// delete a profile: d asks, d again deletes, save writes it
 	goTo(t, m, "work")
 	press(m, "d")
+	if !strings.Contains(read(t, filepath.Join(repo, "profiles.json")), `"work"`) {
+		t.Fatal("one d only asks")
+	}
+	press(m, "d")
+	if !strings.Contains(read(t, filepath.Join(repo, "profiles.json")), `"work"`) {
+		t.Fatal("the delete waits for save")
+	}
+	m.save()
 	got = read(t, filepath.Join(repo, "profiles.json"))
 	if strings.Contains(got, `"work"`) || strings.Contains(got, `"app"`) {
 		t.Fatalf("delete should remove the profile, got:\n%s", got)
@@ -430,5 +438,66 @@ func TestNoProfilesFileStillWorks(t *testing.T) {
 	skillset(t, "profile", "add", "work", "app")
 	if !strings.Contains(read(t, filepath.Join(repo, "profiles.json")), `"work"`) {
 		t.Fatal("the first profile write should create profiles.json")
+	}
+}
+
+func TestProfileRmTurnsTheProfileOff(t *testing.T) {
+	_, repo := profileRepo(t)
+	// app is in work and overlap; nice only in work; core is required by app
+	skillset(t, "enable", "work")
+	skillset(t, "enable", "overlap")
+	skillset(t, "enable", "nice") // direct now as well
+
+	out := skillset(t, "profile", "rm", "overlap")
+	cfg := currentConfig(t)
+	if slices.Contains(cfg.Profiles, "overlap") {
+		t.Fatalf("profiles = %v, want overlap gone from the machine", cfg.Profiles)
+	}
+	// app stays (work), base stays (core needs it)
+	for _, keep := range []string{"app", "core", "base", "nice"} {
+		if !slices.Contains(cfg.Enabled, keep) {
+			t.Fatalf("enabled = %v, want %s kept", cfg.Enabled, keep)
+		}
+	}
+	if !strings.Contains(out, "removed overlap") {
+		t.Fatalf("out = %q", out)
+	}
+
+	out = skillset(t, "profile", "rm", "work")
+	cfg = currentConfig(t)
+	if slices.Contains(cfg.Enabled, "app") || !slices.Contains(cfg.Enabled, "nice") {
+		t.Fatalf("enabled = %v, want app off and the direct nice kept", cfg.Enabled)
+	}
+	if !strings.Contains(out, "skills disabled: app") || !strings.Contains(out, "skillset apply") {
+		t.Fatalf("out = %q, want the disabled skills and the apply reminder", out)
+	}
+	if p, _ := loadProfiles(repo); len(p) != 2 {
+		t.Fatalf("profiles.json = %v, want work and overlap deleted", p)
+	}
+}
+
+func TestTUIProfileDeleteIsPendingAndDiscardable(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"work": {"skills": ["nice"]}}`)
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+	goTo(t, m, "work")
+	press(m, " ")
+	m.save()
+	goTo(t, m, "work")
+	press(m, "d")
+	press(m, "j") // moving away cancels the question
+	goTo(t, m, "work")
+	press(m, "d")
+	if m.deleted != nil {
+		t.Fatal("a d after moving away must ask again")
+	}
+	press(m, "d")
+	if !strings.Contains(m.pending(), "1 profile deleted") || slices.Contains(m.cfg.Enabled, "nice") {
+		t.Fatalf("pending = %q enabled = %v", m.pending(), m.cfg.Enabled)
+	}
+	if !strings.Contains(read(t, filepath.Join(repo, "profiles.json")), `"work"`) {
+		t.Fatal("nothing is written before save, so discarding keeps the profile")
 	}
 }

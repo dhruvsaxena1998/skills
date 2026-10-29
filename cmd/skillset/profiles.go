@@ -144,3 +144,11 @@ func disableProfile(cfg *Config, name string, p profile, profiles map[string]pro
 	}
 	return removed, true
 }
+
+// removeProfile turns a profile off with the usual disable rules, then drops its
+// definition, so deleting one never leaves skills that no profile can turn off.
+func removeProfile(cfg *Config, name string, profiles map[string]profile, deps map[string]dep) []string {
+	removed, _ := disableProfile(cfg, name, profiles[name], profiles, deps)
+	delete(profiles, name)
+	return removed
+}

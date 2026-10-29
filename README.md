@@ -196,7 +196,7 @@ skillset profile ls                                  # list profiles and their m
 skillset profile add writing technical-writing unslop # create writing, or add to it
 skillset profile add writing --desc "clear prose"     # set or replace the description
 skillset profile set review pr blast-radius unslop    # replace review's members
-skillset profile rm writing                            # delete the profile
+skillset profile rm writing                            # turn writing off, then delete it
 ```
 
 `add` creates the profile if it doesn't exist and merges any new members into it. `set`
@@ -212,8 +212,9 @@ profile. A repo without
 In the selection screen, profiles have their own section. Move right to inspect or toggle
 individual members, left to return to the profile, and space on the profile to merge or
 remove the whole selection. `n` opens the profile editor (empty to create one, or the
-profile under the cursor to edit it), and `d` deletes the profile under the cursor. Profile
-edits write `profiles.json` at once; the selection changes still go through the review-and-
+profile under the cursor to edit it). `d` asks, and a second `d` deletes the profile under
+the cursor; like `profile rm` it turns the profile off first, and the delete waits for save,
+so discarding keeps it. Profile edits write `profiles.json` at once; the selection changes still go through the review-and-
 save step.
 
 ### Apply

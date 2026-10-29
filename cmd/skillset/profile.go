@@ -32,7 +32,7 @@ func profileCmd(args []string, out io.Writer) error {
 	case "add":
 		return profileAdd(out, repo, profiles, args[1:])
 	case "rm":
-		return profileRemove(out, repo, profiles, args[1:])
+		return profileRemove(out, cfg, profiles, args[1:])
 	case "set":
 		return profileSet(out, repo, profiles, args[1:])
 	default:
@@ -176,7 +176,10 @@ func profileSet(out io.Writer, repo string, profiles map[string]profile, args []
 	})
 }
 
-func profileRemove(out io.Writer, repo string, profiles map[string]profile, args []string) error {
+// profileRemove turns the profile off on this machine before deleting it. The
+// selection is saved first: if profiles.json then fails to write, the profile is
+// still defined, just off, and nothing is orphaned.
+func profileRemove(out io.Writer, cfg *Config, profiles map[string]profile, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: skillset profile rm <name>")
 	}
@@ -184,11 +187,22 @@ func profileRemove(out io.Writer, repo string, profiles map[string]profile, args
 	if _, ok := profiles[name]; !ok {
 		return fmt.Errorf("no profile named %q", name)
 	}
-	delete(profiles, name)
-	if err := saveProfiles(repo, profiles); err != nil {
+	deps, err := loadDeps(cfg.Repo)
+	if err != nil {
+		return err
+	}
+	removed := removeProfile(cfg, name, profiles, deps)
+	if err := cfg.save(); err != nil {
+		return err
+	}
+	if err := saveProfiles(cfg.Repo, profiles); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "removed %s\n", name)
+	if len(removed) > 0 {
+		fmt.Fprintf(out, "skills disabled: %s\n", strings.Join(removed, ", "))
+		fmt.Fprintln(out, "run `skillset apply` to link")
+	}
 	return nil
 }
 
