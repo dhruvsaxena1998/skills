@@ -21,7 +21,7 @@ const usage = `skillset links this repo's skills into your agent folders.
   skillset disable <skill|profile> turn a skill or profile off
   skillset apply           link enabled skills, unlink the rest
   skillset sync <source>   pull a source's skills from upstream into this repo
-  skillset profile ...     create, edit and delete profiles (ls, add, rm, set)
+  skillset profile ...     create, edit and delete profiles (see: skillset profile help)
   skillset playbook        print the playbook (AGENTS.md) for setting up a skills repo
   skillset update          replace this binary with the latest release
   skillset version         print the version of this binary (--version, -v)

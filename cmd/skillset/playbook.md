@@ -306,10 +306,17 @@ Editing is also on the command line, where agents and scripts change definitions
 
 ```sh
 skillset profile ls
+skillset profile show <name>
 skillset profile add <name> <skill>... [--desc <text>]
-skillset profile set <name> <skill>... [--desc <text>]
-skillset profile rm <name>
+skillset profile set <name> [<skill>...] [--desc <text>]
+skillset profile rm <name> [<skill>...]
 ```
+
+`ls` marks the profiles on here with `*` and names members gone from the repo; `show` prints
+one profile with each member's state. `rm <name> <skill>...` drops just those members, even
+ones gone from the repo, and `skillset profile help` lists all of this. Unknown skill names
+are all reported at once, each with a near match when there is one. When a skill and a
+profile share a name, `enable` and `disable` act on the skill and print the `profile:` hint.
 
 `add` creates the profile or merges the members in; `set` replaces the member list, or with
 only `--desc` keeps it. A member name that isn't a skill in the repo is refused before

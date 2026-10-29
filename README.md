@@ -194,10 +194,12 @@ on, dropped members off unless something else keeps them) and asks for `apply`; 
 that is off here changes only in the file.
 
 ```sh
-skillset profile ls                                  # list profiles and their members
+skillset profile ls                                  # list profiles; * marks those on here
+skillset profile show writing                        # one profile, its skills on or off
 skillset profile add writing technical-writing unslop # create writing, or add to it
 skillset profile add writing --desc "clear prose"     # set or replace the description
 skillset profile set review pr blast-radius unslop    # replace review's members
+skillset profile rm review unslop                      # drop one skill from review
 skillset profile rm writing                            # turn writing off, then delete it
 ```
 

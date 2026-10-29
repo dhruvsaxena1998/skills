@@ -14,21 +14,27 @@ import (
 // updates this machine's selection, which then needs `skillset apply`.
 func profileCmd(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: skillset profile <ls|add|rm|set> ...\n%s", profileUsage)
+		return fmt.Errorf("usage: skillset profile <ls|show|add|set|rm> ...\n%s", profileUsage)
+	}
+	switch args[0] {
+	case "help", "-h", "--help":
+		fmt.Fprint(out, profileUsage)
+		return nil
 	}
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
-	repo := cfg.Repo
-	profiles, err := loadProfiles(repo)
+	profiles, err := loadProfiles(cfg.Repo)
 	if err != nil {
 		return err
 	}
 
 	switch args[0] {
 	case "ls":
-		return profileList(out, profiles)
+		return profileList(out, cfg, profiles)
+	case "show":
+		return profileShow(out, cfg, profiles, args[1:])
 	case "add":
 		return profileAdd(out, cfg, profiles, args[1:])
 	case "rm":
@@ -40,22 +46,79 @@ func profileCmd(args []string, out io.Writer) error {
 	}
 }
 
-const profileUsage = `  skillset profile ls
-  skillset profile add <name> <skill> [skill...] [--desc <text>]
-  skillset profile rm <name>
-  skillset profile set <name> <skill> [skill...] [--desc <text>]`
+const profileUsage = `skillset profile edits profiles.json, the repo's named groups of skills.
 
-func profileList(out io.Writer, profiles map[string]profile) error {
+  skillset profile ls                                   list profiles; * marks one on here
+  skillset profile show <name>                          one profile and its skills' state
+  skillset profile add <name> <skill>... [--desc <text>]  create a profile, or add skills to it
+  skillset profile set <name> [<skill>...] [--desc <text>] replace its skills, or just the description
+  skillset profile rm <name>                            turn it off here, then delete it
+  skillset profile rm <name> <skill>...                 drop just those skills from it
+`
+
+// profileList prints every profile, * before the ones enabled on this machine,
+// and names any member the repo no longer has.
+func profileList(out io.Writer, cfg *Config, profiles map[string]profile) error {
+	if len(profiles) == 0 {
+		fmt.Fprintln(out, "no profiles yet: skillset profile add <name> <skill>...")
+		return nil
+	}
+	skillsDir := filepath.Join(cfg.Repo, "skills")
 	for _, name := range profileNames(profiles) {
 		p := profiles[name]
-		members := "none"
-		if len(p.Skills) > 0 {
-			members = strings.Join(p.Skills, ", ")
+		mark := " "
+		if slices.Contains(cfg.Profiles, name) {
+			mark = "*"
 		}
+		line := mark + " " + name
 		if p.Description != "" {
-			fmt.Fprintf(out, "%s  %s\n  %s\n", name, p.Description, members)
-		} else {
-			fmt.Fprintf(out, "%s\n  %s\n", name, members)
+			line += "  " + p.Description
+		}
+		fmt.Fprintln(out, line)
+		fmt.Fprintf(out, "    %s\n", strings.Join(p.Skills, ", "))
+		if missing := missingMembers(skillsDir, p); len(missing) > 0 {
+			fmt.Fprintf(out, "    missing from the repo: %s\n", strings.Join(missing, ", "))
+		}
+	}
+	return nil
+}
+
+func missingMembers(skillsDir string, p profile) []string {
+	var missing []string
+	for _, member := range p.Skills {
+		if !isSkill(skillsDir, member) {
+			missing = append(missing, member)
+		}
+	}
+	return missing
+}
+
+func profileShow(out io.Writer, cfg *Config, profiles map[string]profile, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: skillset profile show <name>")
+	}
+	name := args[0]
+	p, ok := profiles[name]
+	if !ok {
+		return fmt.Errorf("no profile named %q%s", name, suggest(name, profileNames(profiles)))
+	}
+	state := "not enabled here"
+	if slices.Contains(cfg.Profiles, name) {
+		state = "enabled here"
+	}
+	fmt.Fprintf(out, "%s  (%s)\n", name, state)
+	if p.Description != "" {
+		fmt.Fprintln(out, p.Description)
+	}
+	skillsDir := filepath.Join(cfg.Repo, "skills")
+	for _, member := range sortedUnique(p.Skills) {
+		switch {
+		case !isSkill(skillsDir, member):
+			fmt.Fprintf(out, "  ! %s  missing from the repo\n", member)
+		case slices.Contains(cfg.Enabled, member):
+			fmt.Fprintf(out, "  %s %s\n", boxOn, member)
+		default:
+			fmt.Fprintf(out, "  %s %s\n", boxOff, member)
 		}
 	}
 	return nil
@@ -103,19 +166,60 @@ func checkProfileName(skillsDir, name string) error {
 }
 
 // parseMembers checks every skill exists and returns them deduplicated, so a
-// profile can never be written pointing at a skill that isn't in the repo.
+// profile can never be written pointing at a skill that isn't in the repo. Every
+// unknown name is reported at once, each with a near match when there is one.
 func parseMembers(repo string, names []string) ([]string, error) {
 	skillsDir := filepath.Join(repo, "skills")
-	var members []string
+	var members, unknown []string
 	for _, name := range names {
 		if !isSkill(skillsDir, name) {
-			return nil, fmt.Errorf("%s isn't a skill in %s", name, skillsDir)
+			unknown = append(unknown, name+suggest(name, repoSkills(repo)))
+			continue
 		}
 		if !slices.Contains(members, name) {
 			members = append(members, name)
 		}
 	}
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("not skills in %s: %s", skillsDir, strings.Join(unknown, ", "))
+	}
 	return members, nil
+}
+
+// suggest names the closest of options to a mistyped name, or "" when nothing
+// is within two edits.
+func suggest(name string, options []string) string {
+	best, bestD := "", 3
+	for _, o := range options {
+		if d := editDistance(name, o); d < bestD {
+			best, bestD = o, d
+		}
+	}
+	if best == "" {
+		return ""
+	}
+	return " (did you mean " + best + "?)"
+}
+
+// editDistance is the Levenshtein distance between a and b.
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur := make([]int, len(b)+1)
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(b)]
 }
 
 // editProfile is what add and set share: parse, check a new name, apply the
@@ -144,6 +248,13 @@ func editProfile(out io.Writer, cfg *Config, profiles map[string]profile, args [
 		p.Description = desc
 	}
 	change(&p, members)
+	return commitProfile(out, cfg, profiles, name, old, p, exists)
+}
+
+// commitProfile writes an edited profile, bringing this machine's selection along
+// when the profile is on here, and reports what changed.
+func commitProfile(out io.Writer, cfg *Config, profiles map[string]profile, name string, old, p profile, existed bool) error {
+	repo := cfg.Repo
 	if len(p.Skills) == 0 {
 		return fmt.Errorf("profile %s needs at least one skill", name)
 	}
@@ -164,7 +275,7 @@ func editProfile(out io.Writer, cfg *Config, profiles map[string]profile, args [
 			return err
 		}
 	}
-	if !exists {
+	if !existed {
 		fmt.Fprintf(out, "created %s: %s\n", name, strings.Join(sortedUnique(p.Skills), ", "))
 	} else {
 		fmt.Fprintf(out, "%s: %s\n", name, strings.Join(sortedUnique(p.Skills), ", "))
@@ -205,12 +316,16 @@ func profileSet(out io.Writer, cfg *Config, profiles map[string]profile, args []
 // selection is saved first: if profiles.json then fails to write, the profile is
 // still defined, just off, and nothing is orphaned.
 func profileRemove(out io.Writer, cfg *Config, profiles map[string]profile, args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: skillset profile rm <name>")
+	if len(args) == 0 {
+		return fmt.Errorf("usage: skillset profile rm <name> [<skill>...]")
 	}
 	name := args[0]
-	if _, ok := profiles[name]; !ok {
-		return fmt.Errorf("no profile named %q", name)
+	p, ok := profiles[name]
+	if !ok {
+		return fmt.Errorf("no profile named %q%s", name, suggest(name, profileNames(profiles)))
+	}
+	if len(args) > 1 {
+		return dropMembers(out, cfg, profiles, name, p, args[1:])
 	}
 	deps, err := loadDeps(cfg.Repo)
 	if err != nil {
@@ -229,6 +344,27 @@ func profileRemove(out io.Writer, cfg *Config, profiles map[string]profile, args
 		fmt.Fprintln(out, "run `skillset apply` to link")
 	}
 	return nil
+}
+
+// dropMembers takes just the named skills out of a profile. They needn't exist in
+// the repo any more, which is how a stale member gets cleaned up.
+func dropMembers(out io.Writer, cfg *Config, profiles map[string]profile, name string, p profile, drop []string) error {
+	var notMembers []string
+	for _, skill := range drop {
+		if !slices.Contains(p.Skills, skill) {
+			notMembers = append(notMembers, skill)
+		}
+	}
+	if len(notMembers) > 0 {
+		return fmt.Errorf("not in profile %s: %s", name, strings.Join(notMembers, ", "))
+	}
+	updated := profile{Description: p.Description, Skills: slices.DeleteFunc(slices.Clone(p.Skills), func(s string) bool {
+		return slices.Contains(drop, s)
+	})}
+	if len(updated.Skills) == 0 {
+		return fmt.Errorf("that would leave profile %s with no skills; use `skillset profile rm %s` to delete it", name, name)
+	}
+	return commitProfile(out, cfg, profiles, name, p, updated, true)
 }
 
 // sortedUnique sorts and deduplicates a slice, returning a copy.

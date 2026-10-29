@@ -57,6 +57,7 @@ func enableCmd(args []string, out io.Writer) error {
 		return err
 	}
 	report(out, cfg, deps, "enabled", name, added, "also enabled (required)")
+	collisionHint(out, profiles, name)
 	return nil
 }
 
@@ -103,7 +104,15 @@ func disableCmd(args []string, out io.Writer) error {
 		return err
 	}
 	report(out, cfg, deps, "disabled", name, removed, "also disabled (they require it)")
+	collisionHint(out, profiles, name)
 	return nil
+}
+
+// collisionHint says how to reach a profile that a same-named skill shadows.
+func collisionHint(out io.Writer, profiles map[string]profile, name string) {
+	if _, ok := profiles[name]; ok {
+		fmt.Fprintf(out, "%s is also a profile; use profile:%s for it\n", name, name)
+	}
 }
 
 func selection(args []string, verb string) (*Config, map[string]dep, map[string]profile, string, error) {

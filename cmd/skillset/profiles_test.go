@@ -57,7 +57,7 @@ func TestProfileAddRefusesUnknownSkill(t *testing.T) {
 	save(t, &Config{Repo: repo, Targets: []string{"claude"}})
 
 	err := run([]string{"profile", "add", "bad", "ghost"}, &bytes.Buffer{}, strings.NewReader(""))
-	if err == nil || !strings.Contains(err.Error(), "isn't a skill") {
+	if err == nil || !strings.Contains(err.Error(), "not skills") {
 		t.Fatalf("err = %v, want the unknown skill refused", err)
 	}
 	got := read(t, filepath.Join(repo, "profiles.json"))
@@ -430,7 +430,7 @@ func TestNoProfilesFileStillWorks(t *testing.T) {
 	save(t, &Config{Repo: repo, Targets: []string{"claude"}})
 	skillset(t, "enable", "app")
 	skillset(t, "disable", "app")
-	if out := skillset(t, "profile", "ls"); out != "" {
+	if out := skillset(t, "profile", "ls"); !strings.HasPrefix(out, "no profiles yet") {
 		t.Fatalf("ls with no profiles.json = %q", out)
 	}
 	if _, err := newModel(currentConfig(t)); err != nil {
@@ -695,5 +695,76 @@ func TestTUIEditorChecklistPicksMembers(t *testing.T) {
 	press(m, "enter") // saves
 	if got, _ := loadProfiles(repo); !slices.Equal(got["work"].Skills, []string{"base", "nice"}) {
 		t.Fatalf("work = %v", got["work"].Skills)
+	}
+}
+
+func TestProfileLsAndShow(t *testing.T) {
+	profileRepo(t)
+	skillset(t, "enable", "work")
+	out := skillset(t, "profile", "ls")
+	if !strings.Contains(out, "* work  Everyday work") || !strings.Contains(out, "  overlap") {
+		t.Fatalf("ls = %q, want work marked on and overlap not", out)
+	}
+	if !strings.Contains(out, "missing from the repo: ghost") {
+		t.Fatalf("ls = %q, want broken-set's missing member named", out)
+	}
+	out = skillset(t, "profile", "show", "work")
+	if !strings.Contains(out, "enabled here") || !strings.Contains(out, boxOn+" app") {
+		t.Fatalf("show = %q", out)
+	}
+	err := run([]string{"profile", "show", "wrk"}, &bytes.Buffer{}, strings.NewReader(""))
+	if err == nil || !strings.Contains(err.Error(), "did you mean work") {
+		t.Fatalf("err = %v, want a suggestion", err)
+	}
+}
+
+func TestProfileRmMembers(t *testing.T) {
+	_, repo := profileRepo(t)
+	skillset(t, "enable", "work")
+	out := skillset(t, "profile", "rm", "work", "nice")
+	got, _ := loadProfiles(repo)
+	if !slices.Equal(got["work"].Skills, []string{"app"}) || slices.Contains(currentConfig(t).Enabled, "nice") {
+		t.Fatalf("work = %v, enabled = %v", got["work"].Skills, currentConfig(t).Enabled)
+	}
+	if !strings.Contains(out, "skills disabled: nice") {
+		t.Fatalf("out = %q", out)
+	}
+	skillset(t, "profile", "rm", "broken-set", "ghost") // a member gone from the repo
+	for _, args := range [][]string{{"work", "base"}, {"work", "app"}} {
+		if err := run(append([]string{"profile", "rm"}, args...), &bytes.Buffer{}, strings.NewReader("")); err == nil {
+			t.Errorf("profile rm %v should be refused", args)
+		}
+	}
+}
+
+func TestUnknownSkillsAreAllNamed(t *testing.T) {
+	profileRepo(t)
+	err := run([]string{"profile", "add", "x", "ap", "zzzzzz", "nicee"}, &bytes.Buffer{}, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	for _, want := range []string{"ap (did you mean app?)", "zzzzzz", "nicee (did you mean nice?)"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %v, want %q", err, want)
+		}
+	}
+}
+
+func TestSkillShadowingAProfileHints(t *testing.T) {
+	_, repo := profileRepo(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"app": {"skills": ["nice"]}}`)
+	if out := skillset(t, "enable", "app"); !strings.Contains(out, "use profile:app") {
+		t.Fatalf("enable = %q, want the profile: hint", out)
+	}
+	if out := skillset(t, "disable", "app"); !strings.Contains(out, "use profile:app") {
+		t.Fatalf("disable = %q, want the profile: hint", out)
+	}
+}
+
+func TestProfileHelp(t *testing.T) {
+	for _, arg := range []string{"help", "-h", "--help"} {
+		if out := skillset(t, "profile", arg); !strings.Contains(out, "drop just those skills") {
+			t.Fatalf("profile %s = %q", arg, out)
+		}
 	}
 }
