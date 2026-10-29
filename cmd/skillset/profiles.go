@@ -152,3 +152,30 @@ func removeProfile(cfg *Config, name string, profiles map[string]profile, deps m
 	delete(profiles, name)
 	return removed
 }
+
+// resyncProfile keeps this machine in step when an enabled profile's members
+// change: new members come on with their requirements, and dropped ones go off
+// under the disable rules. profiles must already hold the updated definition. It
+// works on a copy, so a failed enable leaves cfg untouched.
+func resyncProfile(cfg *Config, name string, old, updated profile, profiles map[string]profile, deps map[string]dep, skillsDir string) (added, removed []string, err error) {
+	if !slices.Contains(cfg.Profiles, name) {
+		return nil, nil, nil
+	}
+	var gone []string
+	for _, member := range old.Skills {
+		if !slices.Contains(updated.Skills, member) {
+			gone = append(gone, member)
+		}
+	}
+	c := *cfg
+	c.Enabled, c.Direct = slices.Clone(cfg.Enabled), slices.Clone(cfg.Direct)
+	c.Profiles, c.Seen = slices.Clone(cfg.Profiles), slices.Clone(cfg.Seen)
+	removed, _ = disableProfile(&c, name, profile{Skills: gone}, profiles, deps)
+	if added, _, err = enableProfile(&c, name, updated, deps, skillsDir); err != nil {
+		return nil, nil, err
+	}
+	*cfg = c
+	// a dropped member that a new one requires went off and came back on
+	both := func(s string) bool { return slices.Contains(added, s) && slices.Contains(removed, s) }
+	return slices.DeleteFunc(slices.Clone(added), both), slices.DeleteFunc(removed, both), nil
+}

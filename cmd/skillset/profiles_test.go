@@ -501,3 +501,59 @@ func TestTUIProfileDeleteIsPendingAndDiscardable(t *testing.T) {
 		t.Fatal("nothing is written before save, so discarding keeps the profile")
 	}
 }
+
+func TestEditingAnEnabledProfileResyncs(t *testing.T) {
+	_, repo := profileRepo(t)
+	skillset(t, "enable", "core-only") // core, base
+
+	out := skillset(t, "profile", "add", "core-only", "app")
+	cfg := currentConfig(t)
+	if !slices.Contains(cfg.Enabled, "app") {
+		t.Fatalf("enabled = %v, want the new member on", cfg.Enabled)
+	}
+	if !strings.Contains(out, "skills enabled: app") || !strings.Contains(out, "skillset apply") {
+		t.Fatalf("out = %q", out)
+	}
+
+	// dropping core: app still requires it, so it stays; dropping app turns it off
+	skillset(t, "profile", "set", "core-only", "core")
+	cfg = currentConfig(t)
+	if slices.Contains(cfg.Enabled, "app") || !slices.Contains(cfg.Enabled, "core") {
+		t.Fatalf("enabled = %v, want app off and core kept", cfg.Enabled)
+	}
+	_ = repo
+}
+
+func TestEditingADisabledProfileLeavesTheSelection(t *testing.T) {
+	profileRepo(t)
+	skillset(t, "enable", "nice")
+	before := currentConfig(t).Enabled
+	out := skillset(t, "profile", "set", "work", "base")
+	if got := currentConfig(t).Enabled; !slices.Equal(got, before) {
+		t.Fatalf("enabled = %v, want %v untouched", got, before)
+	}
+	if strings.Contains(out, "apply") {
+		t.Fatalf("out = %q, nothing to apply", out)
+	}
+}
+
+func TestTUIEditOfEnabledProfileIsPending(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"work": {"skills": ["nice"]}}`)
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+	goTo(t, m, "work")
+	press(m, " ")
+	m.save()
+	goTo(t, m, "work")
+	press(m, "n")
+	m.editField, m.editLine = 1, "base"
+	press(m, "enter")
+	if !slices.Contains(m.cfg.Enabled, "base") || slices.Contains(m.cfg.Enabled, "nice") {
+		t.Fatalf("enabled = %v, want base on and nice off", m.cfg.Enabled)
+	}
+	if p := m.pending(); !strings.Contains(p, "skill on") || !strings.Contains(p, "skill off") {
+		t.Fatalf("pending = %q, want the change waiting for save", p)
+	}
+}

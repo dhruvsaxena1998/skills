@@ -188,8 +188,10 @@ profile explicitly, for example `skillset enable profile:writing`.
 
 ### Managing profiles
 
-The `profile` command creates, edits and deletes profiles in `profiles.json`. These change
-the repo definition, not this machine's selection, so they never need `apply`.
+The `profile` command creates, edits and deletes profiles in `profiles.json`. Editing or
+deleting a profile that is enabled on this machine brings the selection along (new members
+on, dropped members off unless something else keeps them) and asks for `apply`; a profile
+that is off here changes only in the file.
 
 ```sh
 skillset profile ls                                  # list profiles and their members

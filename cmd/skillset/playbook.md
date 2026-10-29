@@ -314,8 +314,11 @@ clears it. A new profile's name can't match a skill, start with `-` or `profile:
 spaces, so `skillset enable <name>` always reaches it. A repo with no `profiles.json` works as
 before, and the first `profile add` creates the file. `rm` first turns the profile off on
 this machine with the same rules as `disable`, so no skill is left that no profile can turn
-off. Apart from that, these edit the repo's
-`profiles.json`, never the machine selection, so they never need `skillset apply`.
+off. Changing the members of a profile that is enabled on this machine keeps the selection
+in step the same way: new members come on with their requirements, and dropped ones go off
+unless selected directly, shared with another enabled profile, or required. The command then
+says so and asks for `skillset apply`. Editing a profile that is off here changes only
+`profiles.json`.
 
 ## Hooks
 

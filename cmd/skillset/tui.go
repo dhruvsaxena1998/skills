@@ -1071,12 +1071,26 @@ func (m *model) saveEdit() {
 			return
 		}
 	}
-	m.profiles[name] = profile{Description: m.profiles[name].Description, Skills: m.editSkills}
+	old := m.profiles[name]
+	m.profiles[name] = profile{Description: old.Description, Skills: m.editSkills}
+	added, removed, err := resyncProfile(m.cfg, name, old, m.profiles[name], m.profiles, m.deps, skillsDir)
+	if err != nil {
+		m.profiles[name] = old
+		m.popBody = append(m.editBody(), "", ui.warn.Render(err.Error()))
+		return
+	}
 	if err := saveProfiles(m.cfg.Repo, m.profiles); err != nil {
 		m.popBody = append(m.editBody(), "", ui.warn.Render(err.Error()))
 		return
 	}
 	m.cascade = "saved profile " + name
+	if len(added) > 0 {
+		m.cascade += "  ·  on: " + strings.Join(added, ", ")
+	}
+	if len(removed) > 0 {
+		m.cascade += "  ·  off: " + strings.Join(removed, ", ")
+	}
+	m.dirty = m.pending() != ""
 	m.pop, m.popBody = "", nil
 	m.editName, m.editSkills = "", nil
 	m.build()

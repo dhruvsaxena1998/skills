@@ -10,8 +10,8 @@ import (
 )
 
 // profileCmd edits profiles.json: add creates and merges members, rm deletes,
-// set replaces the members, ls lists. These change the repo, not the machine
-// selection, so they never need `skillset apply`.
+// set replaces the members, ls lists. An edit to a profile enabled here also
+// updates this machine's selection, which then needs `skillset apply`.
 func profileCmd(args []string, out io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: skillset profile <ls|add|rm|set> ...\n%s", profileUsage)
@@ -30,11 +30,11 @@ func profileCmd(args []string, out io.Writer) error {
 	case "ls":
 		return profileList(out, profiles)
 	case "add":
-		return profileAdd(out, repo, profiles, args[1:])
+		return profileAdd(out, cfg, profiles, args[1:])
 	case "rm":
 		return profileRemove(out, cfg, profiles, args[1:])
 	case "set":
-		return profileSet(out, repo, profiles, args[1:])
+		return profileSet(out, cfg, profiles, args[1:])
 	default:
 		return fmt.Errorf("unknown profile action %q\n%s", args[0], profileUsage)
 	}
@@ -119,9 +119,11 @@ func parseMembers(repo string, names []string) ([]string, error) {
 }
 
 // editProfile is what add and set share: parse, check a new name, apply the
-// change, refuse a profile left with no skills, then write.
-func editProfile(out io.Writer, repo string, profiles map[string]profile, args []string, verb string,
+// change, refuse a profile left with no skills, then write. A profile enabled on
+// this machine brings the selection along.
+func editProfile(out io.Writer, cfg *Config, profiles map[string]profile, args []string, verb string,
 	change func(p *profile, members []string)) error {
+	repo := cfg.Repo
 	words, desc, hasDesc, err := profileArgs(args)
 	if err != nil {
 		return fmt.Errorf("profile %s: %w", verb, err)
@@ -137,6 +139,7 @@ func editProfile(out io.Writer, repo string, profiles map[string]profile, args [
 	if err != nil {
 		return err
 	}
+	old := profile{Description: p.Description, Skills: slices.Clone(p.Skills)}
 	if hasDesc {
 		p.Description = desc
 	}
@@ -145,19 +148,41 @@ func editProfile(out io.Writer, repo string, profiles map[string]profile, args [
 		return fmt.Errorf("profile %s needs at least one skill", name)
 	}
 	profiles[name] = p
+	deps, err := loadDeps(repo)
+	if err != nil {
+		return err
+	}
+	added, removed, err := resyncProfile(cfg, name, old, p, profiles, deps, filepath.Join(repo, "skills"))
+	if err != nil {
+		return err
+	}
 	if err := saveProfiles(repo, profiles); err != nil {
 		return err
+	}
+	if len(added)+len(removed) > 0 {
+		if err := cfg.save(); err != nil {
+			return err
+		}
 	}
 	if !exists {
 		fmt.Fprintf(out, "created %s: %s\n", name, strings.Join(sortedUnique(p.Skills), ", "))
 	} else {
 		fmt.Fprintf(out, "%s: %s\n", name, strings.Join(sortedUnique(p.Skills), ", "))
 	}
+	if len(added) > 0 {
+		fmt.Fprintf(out, "skills enabled: %s\n", strings.Join(sortedUnique(added), ", "))
+	}
+	if len(removed) > 0 {
+		fmt.Fprintf(out, "skills disabled: %s\n", strings.Join(sortedUnique(removed), ", "))
+	}
+	if len(added)+len(removed) > 0 {
+		fmt.Fprintln(out, "run `skillset apply` to link")
+	}
 	return nil
 }
 
-func profileAdd(out io.Writer, repo string, profiles map[string]profile, args []string) error {
-	return editProfile(out, repo, profiles, args, "add", func(p *profile, members []string) {
+func profileAdd(out io.Writer, cfg *Config, profiles map[string]profile, args []string) error {
+	return editProfile(out, cfg, profiles, args, "add", func(p *profile, members []string) {
 		for _, member := range members {
 			if !slices.Contains(p.Skills, member) {
 				p.Skills = append(p.Skills, member)
@@ -168,8 +193,8 @@ func profileAdd(out io.Writer, repo string, profiles map[string]profile, args []
 
 // profileSet replaces the members. With none given it leaves them alone, so
 // `set <name> --desc <text>` changes only the description.
-func profileSet(out io.Writer, repo string, profiles map[string]profile, args []string) error {
-	return editProfile(out, repo, profiles, args, "set", func(p *profile, members []string) {
+func profileSet(out io.Writer, cfg *Config, profiles map[string]profile, args []string) error {
+	return editProfile(out, cfg, profiles, args, "set", func(p *profile, members []string) {
 		if len(members) > 0 {
 			p.Skills = members
 		}
