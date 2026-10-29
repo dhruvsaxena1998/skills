@@ -657,3 +657,43 @@ func TestTUIProfileCountSkipsMissingMembers(t *testing.T) {
 		t.Fatalf("total = %d, want only the member in the repo counted", total)
 	}
 }
+
+func TestTUIEditorChecklistPicksMembers(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"work": {"skills": ["nice"]}}`)
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+	goTo(t, m, "work")
+	press(m, "n")
+	m.editField = fieldSkills
+	press(m, " ")
+	if !m.picking || !m.pickOn["nice"] {
+		t.Fatalf("space on skills should open the checklist with nice checked")
+	}
+	press(m, "/")
+	for _, r := range "bas" {
+		press(m, string(r))
+	}
+	press(m, "enter") // ends the filter
+	if shown := m.pickShown(); len(shown) != 1 || shown[0].name != "base" {
+		t.Fatalf("filter shows %v, want base", shown)
+	}
+	press(m, " ") // check base
+	press(m, "enter")
+	if m.picking || m.edit[fieldSkills] != "base nice" && m.edit[fieldSkills] != "nice base" {
+		t.Fatalf("skills field = %q, want base and nice", m.edit[fieldSkills])
+	}
+
+	// esc drops the checklist's changes
+	press(m, " ")
+	press(m, " ") // toggles the first skill
+	press(m, "esc")
+	if !strings.Contains(m.edit[fieldSkills], "base") || !strings.Contains(m.edit[fieldSkills], "nice") {
+		t.Fatalf("esc should keep the field as it was, got %q", m.edit[fieldSkills])
+	}
+	press(m, "enter") // saves
+	if got, _ := loadProfiles(repo); !slices.Equal(got["work"].Skills, []string{"base", "nice"}) {
+		t.Fatalf("work = %v", got["work"].Skills)
+	}
+}

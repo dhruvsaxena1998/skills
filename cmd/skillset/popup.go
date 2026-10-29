@@ -22,7 +22,7 @@ type binding struct {
 
 var bindings = []binding{
 	{"selection", "space · x", "turn a skill, profile, source or target on or off", "space toggle"},
-	{"selection", "n", "create a profile, or edit the one under the cursor", "n profile"},
+	{"selection", "n", "create a profile, or edit the one under the cursor; space on its skills opens a checklist", "n profile"},
 	{"selection", "d", "delete the profile under the cursor (press twice; applied on save)", "d delete"},
 	{"selection", "↑ ↓ · k j", "move inside a column", ""},
 	{"selection", "← → · h l", "on the skills step, between a source or profile and its skills", "←→ columns"},

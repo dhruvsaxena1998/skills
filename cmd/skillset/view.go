@@ -399,9 +399,12 @@ func (m *model) rail() []string {
 // popupPane is the overlay both popups share: a box over the columns, scrolled by
 // the same window the columns use.
 func (m *model) popupPane(h int) string {
-	w := m.popWidth()
+	w, sel := m.popWidth(), -1
+	if m.pop == profileEdit && m.picking {
+		sel = m.pickLine // keep the checklist's cursor on screen
+	}
 	return lipgloss.NewStyle().MarginLeft(2).
-		Render(ui.box.Render(pad(windowed(m.popBody, &m.popTop, -1, h-2), w-4, h-2)))
+		Render(ui.box.Render(pad(windowed(m.popBody, &m.popTop, sel, h-2), w-4, h-2)))
 }
 
 // popWidth keeps the box off both edges and takes everything between them; it is

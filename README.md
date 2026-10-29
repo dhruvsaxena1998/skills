@@ -215,7 +215,9 @@ In the selection screen, profiles have their own section. Move right to inspect 
 individual members, left to return to the profile, and space on the profile to merge or
 remove the whole selection. `n` opens the profile editor (empty to create one, or the
 profile under the cursor to edit it) with name, description and skills fields: tab or enter
-moves on, enter on skills saves, ctrl+u clears a field and ctrl+w drops a word. Changing the
+moves on, enter on skills saves, ctrl+u clears a field and ctrl+w drops a word. Space on the
+skills field opens a checklist of every skill with the members checked: space toggles, `/`
+filters, enter keeps the choice, esc drops it. Changing the
 name renames the profile; a name already taken is refused. `d` asks, and a second `d` deletes the profile under
 the cursor; like `profile rm` it turns the profile off first, and the delete waits for save,
 so discarding keeps it. Profile edits write `profiles.json` at once, and the quit prompt says
