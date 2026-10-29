@@ -289,8 +289,8 @@ The machine config records the enabled profiles next to the flattened `enabled` 
 
 The selection screen shows profiles in their own section. Space merges or removes a profile,
 and the middle column carries the same member skills with navigation back and forth. `n`
-opens the profile editor on the skills step (empty to create, or the profile under the cursor
-to edit) with name, description and skills fields; tab and enter move between them, enter on
+opens a blank editor for a new profile, and `e` edits the profile under the cursor; both work
+on the skills step, with name, description and skills fields; tab and enter move between them, enter on
 skills saves, and the CLI's name and member rules apply. Space on the skills field opens a
 checklist of every skill, members checked: space toggles, `/` filters, enter keeps the
 choice and esc drops it. Changing the name renames the

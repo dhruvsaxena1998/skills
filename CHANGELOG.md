@@ -15,8 +15,8 @@ its [GitHub release](https://github.com/dhruvsaxena1998/skills/releases).
   Names must be reachable by `enable`, unknown skills are all named with suggestions, and
   `rm <name> <skill>...` drops single members. Editing or deleting a profile that is on
   here brings this machine's selection along.
-- The selection screen creates, renames and edits profiles with `n` (name, description,
-  and a skills checklist) and deletes them with `d`, confirmed and applied on save.
+- The selection screen creates profiles with `n` and edits or renames them with `e` (name,
+  description, and a skills checklist) and deletes them with `d`, confirmed and applied on save.
 - A repo without `profiles.json` works as before; the first profile write creates it.
 
 ## v0.1.6 — 2026-10-28

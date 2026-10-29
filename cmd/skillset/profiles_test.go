@@ -196,9 +196,9 @@ func TestTUIProfileEditCreatesAndDeletes(t *testing.T) {
 	goTo(t, m, "work")
 
 	// edit the existing profile's members
-	press(m, "n")
+	press(m, "e")
 	if m.pop != profileEdit {
-		t.Fatalf("n should open the editor, pop = %q", m.pop)
+		t.Fatalf("e should open the editor, pop = %q", m.pop)
 	}
 	m.editField, m.edit[fieldSkills] = fieldSkills, "app core"
 	press(m, "enter") // enter on skills saves
@@ -246,7 +246,7 @@ func TestTUIProfileEditRejectsUnknownSkill(t *testing.T) {
 		t.Fatal(err)
 	}
 	goTo(t, m, "work")
-	press(m, "n")
+	press(m, "e")
 	m.editField, m.edit[fieldSkills] = fieldSkills, "app ghost"
 	press(m, "enter")
 
@@ -541,7 +541,7 @@ func TestTUIEditOfEnabledProfileIsPending(t *testing.T) {
 	press(m, " ")
 	m.save()
 	goTo(t, m, "work")
-	press(m, "n")
+	press(m, "e")
 	m.editField, m.edit[fieldSkills] = fieldSkills, "base"
 	press(m, "enter")
 	if !slices.Contains(m.cfg.Enabled, "base") || slices.Contains(m.cfg.Enabled, "nice") {
@@ -562,7 +562,7 @@ func TestTUIRenameMovesTheProfile(t *testing.T) {
 	press(m, " ")
 	m.save()
 	goTo(t, m, "work")
-	press(m, "n")
+	press(m, "e")
 	m.edit[fieldName] = "job"
 	m.editField = fieldSkills
 	press(m, "enter")
@@ -608,7 +608,7 @@ func TestTUIEditorFieldsAndKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	goTo(t, m, "work")
-	press(m, "n")
+	press(m, "e")
 	if !strings.Contains(m.popBody[0], "edit profile work") {
 		t.Fatalf("heading = %q", m.popBody[0])
 	}
@@ -631,9 +631,9 @@ func TestTUIEditorFieldsAndKeys(t *testing.T) {
 	}
 
 	m.setStep(tabTargets)
-	press(m, "n")
+	press(m, "e")
 	if m.pop == profileEdit {
-		t.Fatal("n should do nothing on the targets step")
+		t.Fatal("e should do nothing on the targets step")
 	}
 }
 
@@ -655,7 +655,7 @@ func TestTUIEditorChecklistPicksMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	goTo(t, m, "work")
-	press(m, "n")
+	press(m, "e")
 	m.editField = fieldSkills
 	press(m, " ")
 	if !m.picking || !m.pickOn["nice"] {
@@ -756,5 +756,30 @@ func TestProfileHelp(t *testing.T) {
 		if out := skillset(t, "profile", arg); !strings.Contains(out, "drop just those skills") {
 			t.Fatalf("profile %s = %q", arg, out)
 		}
+	}
+}
+
+// n on a profile must create a second one, never rename the profile under the cursor.
+func TestTUINewOnAProfileRowCreatesAnother(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"frontend": {"skills": ["nice"]}}`)
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+	for _, at := range []string{"frontend", "nice"} {
+		goTo(t, m, at)
+		press(m, "n")
+		if m.editOrig != "" || m.edit != [3]string{} {
+			t.Fatalf("n on %s should open a blank editor, got %q %v", at, m.editOrig, m.edit)
+		}
+		press(m, "esc")
+	}
+	press(m, "n")
+	m.edit = [3]string{"global", "", "base"}
+	m.editField = fieldSkills
+	press(m, "enter")
+	got, _ := loadProfiles(repo)
+	if _, ok := got["frontend"]; !ok || len(got) != 2 {
+		t.Fatalf("profiles = %v, want frontend kept and global added", got)
 	}
 }

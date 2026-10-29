@@ -747,7 +747,11 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 	case " ", "x":
 		m.toggle()
 	case "n":
-		if r, ok := m.at(); ok && m.step == tabSkills {
+		if m.step == tabSkills {
+			m.openEdit(row{}) // always a new profile: a typed name must never rename one
+		}
+	case "e":
+		if r, ok := m.at(); ok && m.step == tabSkills && profileNameGroup(r) != "" {
 			m.openEdit(r)
 		}
 	case "d":
@@ -979,8 +983,8 @@ const (
 	fieldSkills
 )
 
-// openEdit puts the current row's profile into the editor, or starts an empty
-// one when there is no profile under the cursor.
+// openEdit puts the row's profile into the editor, or starts an empty one when
+// the row isn't a profile or one of its skills.
 func (m *model) openEdit(r row) {
 	m.editOrig, m.edit, m.editField = "", [3]string{}, fieldName
 	if name := profileNameGroup(r); name != "" {

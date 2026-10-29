@@ -215,8 +215,8 @@ profile. A repo without
 
 In the selection screen, profiles have their own section. Move right to inspect or toggle
 individual members, left to return to the profile, and space on the profile to merge or
-remove the whole selection. `n` opens the profile editor (empty to create one, or the
-profile under the cursor to edit it) with name, description and skills fields: tab or enter
+remove the whole selection. `n` opens a blank editor for a new profile, wherever the cursor
+is; `e` edits the profile under the cursor (or the profile of the skill under it). The editor has name, description and skills fields: tab or enter
 moves on, enter on skills saves, ctrl+u clears a field and ctrl+w drops a word. Space on the
 skills field opens a checklist of every skill with the members checked: space toggles, `/`
 filters, enter keeps the choice, esc drops it. Changing the
