@@ -279,15 +279,13 @@ list. Profiles can mix skills from any source, and sync never changes the file.
 
 `skillset enable writing` merges the members and their requirements into the current
 selection; enabling another profile does not disable the first. `skillset disable writing`
-removes only its listed members, keeping any that were enabled directly, belong to another
-enabled profile, or are required by a skill that remains enabled. Unlisted requirements stay
+turns off its listed members, even ones that were already on before it, except members
+another enabled profile lists or a skill that stays on requires. Unlisted requirements stay
 enabled, matching ordinary skill disable behavior. A same-named skill wins over a profile;
 `profile:writing` selects the profile explicitly.
 
-The machine config records directly enabled skills and enabled profiles separately from the
-flattened `enabled` list that `apply` consumes. Older configs adopt their existing enabled
-skills as direct selections on the next save, so adding profiles never makes the first
-profile disable remove a pre-existing choice.
+The machine config records the enabled profiles next to the flattened `enabled` list that
+`apply` consumes. A config from before profiles needs no migration.
 
 The selection screen shows profiles in their own section. Space merges or removes a profile,
 and the middle column carries the same member skills with navigation back and forth. `n`
@@ -329,7 +327,7 @@ before, and the first `profile add` creates the file. `rm` first turns the profi
 this machine with the same rules as `disable`, so no skill is left that no profile can turn
 off. Changing the members of a profile that is enabled on this machine keeps the selection
 in step the same way: new members come on with their requirements, and dropped ones turn off
-unless selected directly, shared with another enabled profile, or required. The command then
+unless another enabled profile lists them or a skill that stays on requires them. The command then
 says so and asks for `skillset apply`. Editing a profile that is off here changes only
 `profiles.json`.
 

@@ -91,7 +91,7 @@ type model struct {
 
 	// the selection as it was last written, so the rail can say what a save would
 	// change rather than only what the last toggle did
-	savedOn, savedDirect, savedProfiles, savedTargets []string
+	savedOn, savedProfiles, savedTargets []string
 
 	pop     string   // "skill:<name>" or "keys" while an overlay is up, "" when none is
 	popBody []string // its lines, the first of them its heading
@@ -149,10 +149,9 @@ func newModel(cfg *Config) (*model, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg.ensureDirect()
 	m := &model{cfg: cfg, home: home, width: 100, height: 30,
 		desc: map[string]string{}, patches: map[string][]string{}, loading: map[string]bool{},
-		savedOn: slices.Clone(cfg.Enabled), savedDirect: slices.Clone(cfg.Direct),
+		savedOn:       slices.Clone(cfg.Enabled),
 		savedProfiles: slices.Clone(cfg.Profiles), savedTargets: slices.Clone(cfg.Targets)}
 	if err := m.reload(); err != nil {
 		return nil, err
@@ -831,7 +830,7 @@ func (m *model) save() tea.Cmd {
 		return nil
 	}
 	m.review, m.dirty, m.asked = nil, false, false
-	m.savedOn, m.savedDirect = slices.Clone(m.cfg.Enabled), slices.Clone(m.cfg.Direct)
+	m.savedOn = slices.Clone(m.cfg.Enabled)
 	m.savedProfiles, m.savedTargets = slices.Clone(m.cfg.Profiles), slices.Clone(m.cfg.Targets)
 	m.status = fmt.Sprintf("applied: %d changes", len(lines(buf.String())))
 	m.build()
@@ -927,9 +926,6 @@ func (m *model) toggleSkill(name string) bool {
 		withDependents(name, m.deps, &drop)
 		var also []string
 		for _, n := range drop {
-			if i := slices.Index(m.cfg.Direct, n); i >= 0 {
-				m.cfg.Direct = slices.Delete(m.cfg.Direct, i, i+1)
-			}
 			if i := slices.Index(m.cfg.Enabled, n); i >= 0 {
 				m.cfg.Enabled = slices.Delete(m.cfg.Enabled, i, i+1)
 				if n != name {
@@ -947,9 +943,6 @@ func (m *model) toggleSkill(name string) bool {
 	if err := withRequires(name, m.deps, skillsDir, &want); err != nil {
 		m.cascade = "can't enable " + name + ": " + err.Error()
 		return false // nothing changed, so earlier changes stay unsaved
-	}
-	if !slices.Contains(m.cfg.Direct, name) {
-		m.cfg.Direct = append(m.cfg.Direct, name)
 	}
 	var also []string
 	for _, n := range want {
@@ -1288,7 +1281,7 @@ func (m *model) toggleProfile(name string) bool {
 			}
 		}
 		if len(kept) > 0 {
-			m.cascade += "  ·  still on (you turned them on, another profile has them, or a skill needs them): " + strings.Join(kept, ", ")
+			m.cascade += "  ·  still on (another profile has them, or a skill needs them): " + strings.Join(kept, ", ")
 		}
 		return true
 	}

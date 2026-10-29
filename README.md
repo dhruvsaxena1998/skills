@@ -48,7 +48,7 @@ skillset init ~/skills   # or name the clone, e.g. after moving it
 `init` walks up from the working directory looking for a clone and offers to clone one into
 `~/skills` if it finds none. It saves the path in `~/.config/skillset/config.json`
 (`%USERPROFILE%\.config\skillset\config.json` on Windows) along with this machine's enabled
-targets, directly enabled skills, enabled profiles, and the skills it has already seen. That file is outside the repo
+targets, enabled skills, enabled profiles, and the skills it has already seen. That file is outside the repo
 and is never committed, so switching a skill on or off creates no commit.
 
 The first `init` on a machine adopts the skills already linked there as its selection, so
@@ -173,14 +173,14 @@ the commands and selection screen work as before.
 ```sh
 skillset enable writing
 skillset enable review   # merges with writing; nothing is switched off
-skillset disable writing # review and direct selections keep unslop on
+skillset disable writing # turns writing's skills off; review keeps unslop on
 skillset apply
 ```
 
 Enabling a profile adds its members and their requirements and records the profile as
 enabled. Enabling another profile is cumulative. Disabling a profile considers only its
-listed members: a member stays on when it was enabled directly, belongs to another enabled
-profile, or is required by a skill that remains enabled. Requirements that are not listed
+listed members and turns them off, even ones that were on before the profile. A member stays
+on only when another enabled profile lists it or a skill that stays on requires it. Requirements that are not listed
 members are left on, just as they are when an individual skill is disabled.
 
 A skill with the same name as a profile takes precedence. Use `profile:<name>` to select the

@@ -103,9 +103,6 @@ func TestEnableProfileMergesSkillsAndRequirements(t *testing.T) {
 	if !slices.Equal(cfg.Profiles, []string{"work"}) {
 		t.Fatalf("profiles = %v, want work on", cfg.Profiles)
 	}
-	if len(cfg.Direct) != 0 {
-		t.Fatalf("direct = %v, profile membership is not a direct skill selection", cfg.Direct)
-	}
 	if !strings.Contains(out, "enabled profile work") || !strings.Contains(out, "run `skillset apply`") {
 		t.Fatalf("output = %q, want the profile and apply hint", out)
 	}
@@ -115,18 +112,18 @@ func TestEnableProfileMergesSkillsAndRequirements(t *testing.T) {
 	}
 }
 
-func TestDisableProfileKeepsOverlapAndDirectSelections(t *testing.T) {
+func TestDisableProfileKeepsOnlySharedAndRequired(t *testing.T) {
 	_, repo := profileRepo(t)
 	save(t, &Config{Repo: repo, Targets: []string{"claude"}})
+	skillset(t, "enable", "nice") // turned on by hand first: the profile still turns it off
 	skillset(t, "enable", "work")
 	skillset(t, "enable", "overlap")
-	skillset(t, "enable", "nice") // explicitly selected as well as supplied by work
 
 	skillset(t, "disable", "work")
 
 	cfg := currentConfig(t)
-	if got := slices.Sorted(slices.Values(cfg.Enabled)); !slices.Equal(got, []string{"app", "base", "core", "nice"}) {
-		t.Fatalf("enabled = %v, want overlap, direct and non-member requirements kept", got)
+	if got := slices.Sorted(slices.Values(cfg.Enabled)); !slices.Equal(got, []string{"app", "base", "core"}) {
+		t.Fatalf("enabled = %v, want nice off, app kept by overlap, requirements kept", got)
 	}
 	if !slices.Equal(cfg.Profiles, []string{"overlap"}) {
 		t.Fatalf("profiles = %v, want only overlap left", cfg.Profiles)
@@ -134,7 +131,7 @@ func TestDisableProfileKeepsOverlapAndDirectSelections(t *testing.T) {
 
 	skillset(t, "disable", "overlap")
 	cfg = currentConfig(t)
-	if got := slices.Sorted(slices.Values(cfg.Enabled)); !slices.Equal(got, []string{"base", "core", "nice"}) {
+	if got := slices.Sorted(slices.Values(cfg.Enabled)); !slices.Equal(got, []string{"base", "core"}) {
 		t.Fatalf("enabled after overlap off = %v, want only app removed", got)
 	}
 }
@@ -174,7 +171,7 @@ func TestProfilePrefixAvoidsSkillNameCollision(t *testing.T) {
 	skillset(t, "enable", "profile:work")
 
 	cfg := currentConfig(t)
-	if !slices.Equal(cfg.Profiles, []string{"work"}) || len(cfg.Direct) != 0 {
+	if !slices.Equal(cfg.Profiles, []string{"work"}) || len(cfg.Enabled) != 1 {
 		t.Fatalf("selection = %+v, want the profile rather than the same-named skill", cfg)
 	}
 }
@@ -306,8 +303,7 @@ func TestTUIProfileOnlyChangeIsPending(t *testing.T) {
 		t.Fatal(err)
 	}
 	all := []string{"app", "base", "core", "nice"}
-	m.cfg.Enabled, m.cfg.Direct = slices.Clone(all), slices.Clone(all)
-	m.savedOn, m.savedDirect = slices.Clone(all), slices.Clone(all)
+	m.cfg.Enabled, m.savedOn = slices.Clone(all), slices.Clone(all)
 	m.build()
 	goTo(t, m, "work")
 
@@ -315,9 +311,9 @@ func TestTUIProfileOnlyChangeIsPending(t *testing.T) {
 	if !m.dirty || !strings.Contains(m.pending(), "1 profile on") || strings.Contains(m.pending(), "skill") {
 		t.Fatalf("pending = %q, dirty = %v, want only a profile change", m.pending(), m.dirty)
 	}
-	press(m, " ")
-	if m.dirty || m.pending() != "" {
-		t.Fatalf("pending = %q, dirty = %v, toggling back should leave nothing to save", m.pending(), m.dirty)
+	press(m, " ") // off again: the profile's own skills go off with it, even ones already on
+	if p := m.pending(); p != "pending: 2 skills off" {
+		t.Fatalf("pending = %q, want app and nice off", p)
 	}
 }
 
@@ -334,7 +330,7 @@ func TestThemePickKeepsUnsavedProfileOffDisk(t *testing.T) {
 	m.setTheme(themeNames()[1])
 
 	cfg := currentConfig(t)
-	if len(cfg.Profiles) != 0 || len(cfg.Enabled) != 0 || len(cfg.Direct) != 0 {
+	if len(cfg.Profiles) != 0 || len(cfg.Enabled) != 0 {
 		t.Fatalf("disk selection = %+v, want the profile toggle still pending", cfg)
 	}
 	if !slices.Equal(m.cfg.Profiles, []string{"work"}) || !m.dirty {
@@ -342,28 +338,23 @@ func TestThemePickKeepsUnsavedProfileOffDisk(t *testing.T) {
 	}
 }
 
-func TestLegacyEnabledSkillsAreDirectWhenAProfileIsDisabled(t *testing.T) {
+// A config from before profiles, or from a build that recorded "direct", still
+// loads, and skills that were already on turn off with a profile that lists them.
+func TestOldConfigSkillsTurnOffWithTheirProfile(t *testing.T) {
 	_, repo := profileRepo(t)
-	save(t, &Config{Repo: repo, Targets: []string{"claude"}, Enabled: []string{"nice"}})
 	path, err := configPath()
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Simulate a config written before direct skill provenance existed.
-	data = bytes.Replace(data, []byte(`"direct": [`), []byte(`"ignored": [`), 1)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	write(t, path, `{"repo": "`+filepath.ToSlash(repo)+`", "targets": ["claude"], "enabled": ["nice", "base"], "direct": ["nice", "base"], "seen": []}`)
 	skillset(t, "enable", "work")
-
 	skillset(t, "disable", "work")
 
-	if got := enabled(t); !slices.Contains(got, "nice") {
-		t.Fatalf("enabled = %v, a legacy direct selection must survive", got)
+	if got := enabled(t); !slices.Equal(got, []string{"base", "core"}) {
+		t.Fatalf("enabled = %v, want work's skills off and base, core kept", got)
+	}
+	if strings.Contains(read(t, path), "direct") {
+		t.Fatal("the next save should drop the old direct field")
 	}
 }
 
@@ -450,7 +441,6 @@ func TestProfileRmTurnsTheProfileOff(t *testing.T) {
 	// app is in work and overlap; nice only in work; core is required by app
 	skillset(t, "enable", "work")
 	skillset(t, "enable", "overlap")
-	skillset(t, "enable", "nice") // direct now as well
 
 	out := skillset(t, "profile", "rm", "overlap")
 	cfg := currentConfig(t)
@@ -469,10 +459,10 @@ func TestProfileRmTurnsTheProfileOff(t *testing.T) {
 
 	out = skillset(t, "profile", "rm", "work")
 	cfg = currentConfig(t)
-	if slices.Contains(cfg.Enabled, "app") || !slices.Contains(cfg.Enabled, "nice") {
-		t.Fatalf("enabled = %v, want app off and the direct nice kept", cfg.Enabled)
+	if slices.Contains(cfg.Enabled, "app") || slices.Contains(cfg.Enabled, "nice") {
+		t.Fatalf("enabled = %v, want app and nice off", cfg.Enabled)
 	}
-	if !strings.Contains(out, "skills turned off: app") || !strings.Contains(out, "skillset apply") {
+	if !strings.Contains(out, "skills turned off: app, nice") || !strings.Contains(out, "skillset apply") {
 		t.Fatalf("out = %q, want the disabled skills and the apply reminder", out)
 	}
 	if p, _ := loadProfiles(repo); len(p) != 2 {

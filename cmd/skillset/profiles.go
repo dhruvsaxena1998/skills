@@ -59,7 +59,6 @@ func profileNames(profiles map[string]profile) []string {
 // enableProfile merges a profile into the current selection. Validation finishes
 // before any state changes, so one missing member or requirement rejects the set.
 func enableProfile(cfg *Config, name string, p profile, deps map[string]dep, skillsDir string) (added []string, activated bool, err error) {
-	cfg.ensureDirect()
 	var want []string
 	for _, member := range p.Skills {
 		if !isSkill(skillsDir, member) {
@@ -87,11 +86,10 @@ func enableProfile(cfg *Config, name string, p profile, deps map[string]dep, ski
 }
 
 // disableProfile removes only the profile's explicit members. A member survives
-// when it was selected directly, belongs to another enabled profile, or is needed
-// by a skill that remains enabled. Requirements pulled in for the profile but not
+// when it belongs to another enabled profile or is needed by a skill that remains
+// enabled. Requirements pulled in for the profile but not
 // listed as members are left alone, matching ordinary skill disable behavior.
 func disableProfile(cfg *Config, name string, p profile, profiles map[string]profile, deps map[string]dep) (removed []string, deactivated bool) {
-	cfg.ensureDirect()
 	at := slices.Index(cfg.Profiles, name)
 	if at < 0 {
 		return nil, false
@@ -104,11 +102,6 @@ func disableProfile(cfg *Config, name string, p profile, profiles map[string]pro
 		candidates[member] = true
 	}
 	protected := map[string]bool{}
-	for _, member := range cfg.Direct {
-		if candidates[member] {
-			protected[member] = true
-		}
-	}
 	for _, other := range cfg.Profiles {
 		for _, member := range profiles[other].Skills {
 			if candidates[member] {
@@ -168,7 +161,7 @@ func resyncProfile(cfg *Config, name string, old, updated profile, profiles map[
 		}
 	}
 	c := *cfg
-	c.Enabled, c.Direct = slices.Clone(cfg.Enabled), slices.Clone(cfg.Direct)
+	c.Enabled = slices.Clone(cfg.Enabled)
 	c.Profiles, c.Seen = slices.Clone(cfg.Profiles), slices.Clone(cfg.Seen)
 	removed, _ = disableProfile(&c, name, profile{Skills: gone}, profiles, deps)
 	if added, _, err = enableProfile(&c, name, updated, deps, skillsDir); err != nil {

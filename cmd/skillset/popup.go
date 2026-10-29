@@ -175,7 +175,7 @@ func (m *model) setTheme(name string) {
 func (m *model) writeSaved() {
 	c := *m.cfg
 	// clones, because save sorts in place and must not reorder the saved selection
-	c.Enabled, c.Direct = slices.Clone(m.savedOn), slices.Clone(m.savedDirect)
+	c.Enabled = slices.Clone(m.savedOn)
 	c.Profiles, c.Targets = slices.Clone(m.savedProfiles), slices.Clone(m.savedTargets)
 	if err := c.save(); err != nil {
 		m.status = err.Error()

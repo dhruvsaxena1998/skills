@@ -41,9 +41,6 @@ func enableCmd(args []string, out io.Writer) error {
 	}
 
 	var added []string
-	if !slices.Contains(cfg.Direct, name) {
-		cfg.Direct = append(cfg.Direct, name)
-	}
 	for _, n := range want {
 		if !slices.Contains(cfg.Enabled, n) {
 			cfg.Enabled = append(cfg.Enabled, n)
@@ -92,9 +89,6 @@ func disableCmd(args []string, out io.Writer) error {
 
 	var removed []string
 	for _, n := range drop {
-		if i := slices.Index(cfg.Direct, n); i >= 0 {
-			cfg.Direct = slices.Delete(cfg.Direct, i, i+1)
-		}
 		if i := slices.Index(cfg.Enabled, n); i >= 0 {
 			cfg.Enabled = slices.Delete(cfg.Enabled, i, i+1)
 			removed = append(removed, n)
@@ -123,7 +117,6 @@ func selection(args []string, verb string) (*Config, map[string]dep, map[string]
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
-	cfg.ensureDirect()
 	deps, err := loadDeps(cfg.Repo)
 	if err != nil {
 		return nil, nil, nil, "", err

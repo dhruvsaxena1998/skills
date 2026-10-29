@@ -8,7 +8,8 @@ its [GitHub release](https://github.com/dhruvsaxena1998/skills/releases).
 ### Added
 
 - Named skill profiles in an optional `profiles.json`. `enable` merges profiles
-  cumulatively, while `disable` preserves direct, overlapping and required skills. The
+  cumulatively; `disable` turns the profile's skills off except those another enabled
+  profile lists or a remaining skill requires. The
   selection screen has a Profiles section with member navigation and the same review flow.
 - `skillset profile` (ls, show, add, set, rm) edits `profiles.json` from the command line.
   Names must be reachable by `enable`, unknown skills are all named with suggestions, and
