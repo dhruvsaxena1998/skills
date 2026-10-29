@@ -203,8 +203,8 @@ func TestTUIProfileEditCreatesAndDeletes(t *testing.T) {
 	if m.pop != profileEdit {
 		t.Fatalf("n should open the editor, pop = %q", m.pop)
 	}
-	m.editField, m.editLine = 1, "app core"
-	press(m, "enter") // commits skills and saves
+	m.editField, m.edit[fieldSkills] = fieldSkills, "app core"
+	press(m, "enter") // enter on skills saves
 	if got := read(t, filepath.Join(repo, "profiles.json")); !strings.Contains(got, `"core"`) {
 		t.Fatalf("edited profile should contain core:\n%s", got)
 	}
@@ -212,9 +212,13 @@ func TestTUIProfileEditCreatesAndDeletes(t *testing.T) {
 	// create a fresh profile from a skill row
 	goTo(t, m, "nice")
 	press(m, "n")
-	m.editLine = "new"
-	press(m, "tab")          // commit name
-	m.editLine = "nice base" // skill names, space separated
+	if m.editOrig != "" {
+		t.Fatalf("n off a profile should start a new one, editing %q", m.editOrig)
+	}
+	m.edit[fieldName] = "new"
+	press(m, "enter") // to description
+	press(m, "enter") // to skills
+	m.edit[fieldSkills] = "nice base"
 	press(m, "enter")
 	got := read(t, filepath.Join(repo, "profiles.json"))
 	if !strings.Contains(got, `"new"`) {
@@ -246,7 +250,7 @@ func TestTUIProfileEditRejectsUnknownSkill(t *testing.T) {
 	}
 	goTo(t, m, "work")
 	press(m, "n")
-	m.editField, m.editLine = 1, "app ghost"
+	m.editField, m.edit[fieldSkills] = fieldSkills, "app ghost"
 	press(m, "enter")
 
 	// the save should be refused and the bad member this repo lacks named
@@ -548,12 +552,108 @@ func TestTUIEditOfEnabledProfileIsPending(t *testing.T) {
 	m.save()
 	goTo(t, m, "work")
 	press(m, "n")
-	m.editField, m.editLine = 1, "base"
+	m.editField, m.edit[fieldSkills] = fieldSkills, "base"
 	press(m, "enter")
 	if !slices.Contains(m.cfg.Enabled, "base") || slices.Contains(m.cfg.Enabled, "nice") {
 		t.Fatalf("enabled = %v, want base on and nice off", m.cfg.Enabled)
 	}
 	if p := m.pending(); !strings.Contains(p, "skill on") || !strings.Contains(p, "skill off") {
 		t.Fatalf("pending = %q, want the change waiting for save", p)
+	}
+}
+
+func TestTUIRenameMovesTheProfile(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"work": {"description": "d", "skills": ["nice"]}}`)
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+	goTo(t, m, "work")
+	press(m, " ")
+	m.save()
+	goTo(t, m, "work")
+	press(m, "n")
+	m.edit[fieldName] = "job"
+	m.editField = fieldSkills
+	press(m, "enter")
+
+	got, _ := loadProfiles(repo)
+	if _, old := got["work"]; old || got["job"].Description != "d" {
+		t.Fatalf("profiles = %v, want work renamed to job with its description", got)
+	}
+	if cfg := currentConfig(t); !slices.Equal(cfg.Profiles, []string{"job"}) {
+		t.Fatalf("saved profiles = %v, want the rename on disk already", cfg.Profiles)
+	}
+	if m.pending() != "" {
+		t.Fatalf("pending = %q, a rename changes no selection", m.pending())
+	}
+}
+
+func TestTUICreateOverExistingIsRefused(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"work": {"skills": ["nice"]}}`)
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+	goTo(t, m, "nice")
+	for _, name := range []string{"work", "app", "-x", "two words"} {
+		press(m, "n")
+		m.edit = [3]string{name, "", "base"}
+		m.editField = fieldSkills
+		press(m, "enter")
+		if m.pop != profileEdit {
+			t.Fatalf("creating %q should be refused", name)
+		}
+		press(m, "esc")
+	}
+	if got := read(t, filepath.Join(repo, "profiles.json")); strings.Contains(got, "base") {
+		t.Fatalf("nothing should be written:\n%s", got)
+	}
+}
+
+func TestTUIEditorFieldsAndKeys(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"work": {"skills": ["nice"]}}`)
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+	goTo(t, m, "work")
+	press(m, "n")
+	if !strings.Contains(m.popBody[0], "edit profile work") {
+		t.Fatalf("heading = %q", m.popBody[0])
+	}
+	press(m, "tab") // description
+	for _, r := range "clear prose" {
+		press(m, string(r))
+	}
+	press(m, "ctrl+w")
+	if m.edit[fieldDesc] != "clear " {
+		t.Fatalf("ctrl+w left %q", m.edit[fieldDesc])
+	}
+	press(m, "ctrl+u")
+	for _, r := range "prose" {
+		press(m, string(r))
+	}
+	press(m, "enter")
+	press(m, "enter")
+	if got, _ := loadProfiles(repo); got["work"].Description != "prose" {
+		t.Fatalf("description = %q", got["work"].Description)
+	}
+
+	m.setStep(tabTargets)
+	press(m, "n")
+	if m.pop == profileEdit {
+		t.Fatal("n should do nothing on the targets step")
+	}
+}
+
+func TestTUIProfileCountSkipsMissingMembers(t *testing.T) {
+	m, _, repo := tuiModel(t)
+	write(t, filepath.Join(repo, "profiles.json"), `{"work": {"skills": ["nice", "ghost"]}}`)
+	if err := m.reload(); err != nil {
+		t.Fatal(err)
+	}
+	if _, total := m.profileCounts("work"); total != 1 {
+		t.Fatalf("total = %d, want only the member in the repo counted", total)
 	}
 }

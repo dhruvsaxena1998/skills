@@ -338,9 +338,10 @@ func (m *model) counts(src string) (on, total int) {
 
 func (m *model) profileCounts(name string) (on, total int) {
 	seen := map[string]bool{}
+	skillsDir := filepath.Join(m.cfg.Repo, "skills")
 	for _, skill := range m.profiles[name].Skills {
-		if seen[skill] {
-			continue
+		if seen[skill] || !isSkill(skillsDir, skill) {
+			continue // a member missing from the repo is listed in the detail pane instead
 		}
 		seen[skill] = true
 		total++

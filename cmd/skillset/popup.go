@@ -167,6 +167,12 @@ func pick(label string, on bool) string {
 func (m *model) setTheme(name string) {
 	m.cfg.Theme = name
 	useTheme(name)
+	m.writeSaved()
+}
+
+// writeSaved writes the config with the selection as of the last save, for the
+// settings that take effect at once without saving the pending toggles.
+func (m *model) writeSaved() {
 	c := *m.cfg
 	// clones, because save sorts in place and must not reorder the saved selection
 	c.Enabled, c.Direct = slices.Clone(m.savedOn), slices.Clone(m.savedDirect)

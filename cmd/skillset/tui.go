@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -98,12 +99,13 @@ type model struct {
 	query   string   // the keys overlay's search box
 	setAt   int      // the settings row the overlay's cursor is on, len(settings) for the list
 
-	// profile editing: name and skills are each an inline text field the overlay
-	// edits. editField says which has focus; editLine is the text being typed.
-	editName   string   // the profile being edited/created; "" means create
-	editSkills []string // committed member list
-	editField  int      // 0 = name, 1 = skills
-	editLine   string   // the field text while it is being typed
+	// profile editing: the overlay holds three text fields, name, description and
+	// skills (space-separated), and editField is the one with focus. editOrig is
+	// the profile being edited, "" when creating one.
+	editOrig   string
+	edit       [3]string
+	editField  int
+	editedDisk bool // a profile edit has been written to profiles.json this session
 
 	desc    map[string]string   // skill -> description, read on demand
 	patches map[string][]string // skill -> local patch commits, loaded off the draw
@@ -440,6 +442,9 @@ func (m *model) back() tea.Cmd {
 		m.asked = true
 		// the rail, not the top line: at 80 columns the top line would cut it
 		m.cascade = "unsaved changes — s to review them, q again to discard"
+		if m.editedDisk {
+			m.cascade += " (profile edits are already in profiles.json)"
+		}
 	default:
 		return tea.Quit
 	}
@@ -733,7 +738,7 @@ func (m *model) key(msg tea.KeyMsg) tea.Cmd {
 	case " ", "x":
 		m.toggle()
 	case "n":
-		if r, ok := m.at(); ok {
+		if r, ok := m.at(); ok && m.step == tabSkills {
 			m.openEdit(r)
 		}
 	case "d":
@@ -964,125 +969,139 @@ func profileNameGroup(r row) string {
 	return ""
 }
 
+// The editor's fields, in the order tab and enter walk them.
+const (
+	fieldName = iota
+	fieldDesc
+	fieldSkills
+)
+
 // openEdit puts the current row's profile into the editor, or starts an empty
 // one when there is no profile under the cursor.
 func (m *model) openEdit(r row) {
-	name := profileNameGroup(r)
-	if name != "" {
+	m.editOrig, m.edit, m.editField = "", [3]string{}, fieldName
+	if name := profileNameGroup(r); name != "" {
 		if p, exists := m.profiles[name]; exists {
-			m.editName, m.editSkills = name, slices.Clone(p.Skills)
+			m.editOrig = name
+			m.edit = [3]string{name, p.Description, strings.Join(p.Skills, " ")}
 		}
 	}
-	m.editField, m.editLine = 0, m.editName
-	m.pop = profileEdit
-	m.popTop = 0
+	m.pop, m.popTop = profileEdit, 0
 	m.popBody = m.editBody()
 }
 
-// editBody renders the editor: the name line, then the members, the focused field
-// marked by the typing bar.
+// editBody renders the editor, the focused field at full contrast with the
+// typing bar after it.
 func (m *model) editBody() []string {
+	title := "new profile"
+	if m.editOrig != "" {
+		title = "edit profile " + m.editOrig
+	}
 	out := []string{
-		ui.text.Bold(true).Render("edit profile") + ui.dim.Render("  ·  tab picks a field  ·  enter saves  ·  esc cancels"),
+		ui.text.Bold(true).Render(title) + ui.dim.Render("  ·  tab/enter next field, enter on skills saves  ·  ctrl+u clears  ·  esc cancels"),
 		"",
 	}
-	name := m.editLine
-	if m.editField != 0 {
-		name = m.editName
+	for i, label := range []string{"name        ", "description ", "skills      "} {
+		value := ui.dim.Render(m.edit[i])
+		if i == m.editField {
+			value = ui.text.Render(m.edit[i]) + ui.bar.Render(" ") + ui.label.Render("◂")
+		}
+		out = append(out, ui.label.Render(label)+value)
 	}
-	if m.editField == 0 {
-		name = m.editLine + ui.bar.Render(" ") + ui.label.Render("◂")
-	}
-	out = append(out, ui.label.Render("name ")+name)
-
-	// the skills line is edited as space-separated names
-	skills := strings.Join(m.editSkills, " ")
-	if m.editField == 1 {
-		skills = m.editLine + ui.bar.Render(" ") + ui.label.Render("◂")
-	}
-	out = append(out, "")
-	out = append(out, ui.label.Render("skills")+" "+ui.dim.Render(skills))
-	out = append(out, "", ui.dim.Render("members are space-separated; they must match skill folder names"))
-	return out
+	return append(out, "", ui.dim.Render("skills are folder names, separated by spaces"))
 }
 
 // editKey handles the profile editor overlay's keys.
 func (m *model) editKey(msg tea.KeyMsg) {
-	key := msg.String()
-	switch key {
+	f := &m.edit[m.editField]
+	switch msg.String() {
 	case "esc":
 		m.pop, m.popBody = "", nil
-		m.editName, m.editSkills = "", nil
-		m.editField, m.editLine = 0, ""
-	case "tab", "enter":
-		if m.editField == 0 {
-			// commit the name, move to skills
-			m.editName = strings.TrimSpace(m.editLine)
-			m.editField = 1
-			m.editLine = strings.Join(m.editSkills, " ")
-		} else if key == "tab" {
-			// commit skills, back to the name
-			m.commitLine()
-			m.editField = 0
-			m.editLine = m.editName
-		} else {
-			// enter commits and saves
-			m.commitLine()
+		return
+	case "enter":
+		if m.editField == fieldSkills {
 			m.saveEdit()
 			return
 		}
+		m.editField++
+	case "tab":
+		m.editField = (m.editField + 1) % len(m.edit)
+	case "shift+tab":
+		m.editField = (m.editField + len(m.edit) - 1) % len(m.edit)
 	case "backspace":
-		if r := []rune(m.editLine); len(r) > 0 {
-			m.editLine = string(r[:len(r)-1])
+		if r := []rune(*f); len(r) > 0 {
+			*f = string(r[:len(r)-1])
 		}
+	case "ctrl+u":
+		*f = ""
+	case "ctrl+w":
+		trimmed := strings.TrimRightFunc(*f, unicode.IsSpace)
+		*f = trimmed[:strings.LastIndexFunc(trimmed, unicode.IsSpace)+1]
 	default:
 		if len(msg.Runes) > 0 {
-			m.editLine += string(msg.Runes)
+			*f += string(msg.Runes)
 		}
 	}
 	m.popBody = m.editBody()
 }
 
-// commitLine parses whatever is in the focused field back into the model.
-func (m *model) commitLine() {
-	switch m.editField {
-	case 0:
-		m.editName = strings.TrimSpace(m.editLine)
-	case 1:
-		m.editSkills = strings.Fields(strings.ReplaceAll(m.editLine, ",", " "))
-	}
+// editError keeps the editor open with the reason the save was refused.
+func (m *model) editError(msg string) {
+	m.popBody = append(m.editBody(), "", ui.warn.Render(msg))
 }
 
-// saveEdit writes the profile to profiles.json and rebuilds the screen.
+// saveEdit writes the profile to profiles.json under the same rules as the CLI.
+// A rename moves the definition, and the machine's record of it, to the new name.
 func (m *model) saveEdit() {
-	name := m.editName
-	if name == "" {
-		m.popBody = append(m.editBody(), "", ui.warn.Render("a profile needs a name"))
-		return
-	}
-	if len(m.editSkills) == 0 {
-		m.popBody = append(m.editBody(), "", ui.warn.Render("a profile needs at least one skill"))
-		return
-	}
+	name := strings.TrimSpace(m.edit[fieldName])
+	members := strings.Fields(strings.ReplaceAll(m.edit[fieldSkills], ",", " "))
 	skillsDir := filepath.Join(m.cfg.Repo, "skills")
-	for _, s := range m.editSkills {
-		if !isSkill(skillsDir, s) {
-			m.popBody = append(m.editBody(), "", ui.warn.Render(s+" isn't a skill in this repo"))
+	if name != m.editOrig {
+		if _, taken := m.profiles[name]; taken {
+			m.editError("a profile named " + name + " already exists")
+			return
+		}
+		if err := checkProfileName(skillsDir, name); err != nil {
+			m.editError(err.Error())
 			return
 		}
 	}
-	old := m.profiles[name]
-	m.profiles[name] = profile{Description: old.Description, Skills: m.editSkills}
-	added, removed, err := resyncProfile(m.cfg, name, old, m.profiles[name], m.profiles, m.deps, skillsDir)
+	members, err := parseMembers(m.cfg.Repo, members)
 	if err != nil {
-		m.profiles[name] = old
-		m.popBody = append(m.editBody(), "", ui.warn.Render(err.Error()))
+		m.editError(err.Error())
 		return
 	}
-	if err := saveProfiles(m.cfg.Repo, m.profiles); err != nil {
-		m.popBody = append(m.editBody(), "", ui.warn.Render(err.Error()))
+	if len(members) == 0 {
+		m.editError("a profile needs at least one skill")
 		return
 	}
+
+	old := m.profiles[m.editOrig]
+	updated := profile{Description: strings.TrimSpace(m.edit[fieldDesc]), Skills: members}
+	profiles := maps.Clone(m.profiles)
+	delete(profiles, m.editOrig)
+	profiles[name] = updated
+	cfg := *m.cfg
+	cfg.Profiles = slices.Clone(m.cfg.Profiles)
+	if m.editOrig != "" && name != m.editOrig {
+		renameIn(cfg.Profiles, m.editOrig, name)
+	}
+	added, removed, err := resyncProfile(&cfg, name, old, updated, profiles, m.deps, skillsDir)
+	if err != nil {
+		m.editError(err.Error())
+		return
+	}
+	if err := saveProfiles(m.cfg.Repo, profiles); err != nil {
+		m.editError(err.Error())
+		return
+	}
+	if m.editOrig != "" && name != m.editOrig {
+		// a rename is no selection change, so the disk's selection takes it now:
+		// otherwise discarding would leave the old name enabled with no definition
+		renameIn(m.savedProfiles, m.editOrig, name)
+		m.writeSaved()
+	}
+	m.profiles, *m.cfg, m.editedDisk = profiles, cfg, true
 	m.cascade = "saved profile " + name
 	if len(added) > 0 {
 		m.cascade += "  ·  on: " + strings.Join(added, ", ")
@@ -1092,8 +1111,14 @@ func (m *model) saveEdit() {
 	}
 	m.dirty = m.pending() != ""
 	m.pop, m.popBody = "", nil
-	m.editName, m.editSkills = "", nil
 	m.build()
+}
+
+// renameIn replaces old with name wherever it is in list.
+func renameIn(list []string, old, name string) {
+	if at := slices.Index(list, old); at >= 0 {
+		list[at] = name
+	}
 }
 
 // deleteProfile asks once, then turns the profile off and marks its definition

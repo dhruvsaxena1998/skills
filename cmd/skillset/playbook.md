@@ -291,7 +291,10 @@ profile disable remove a pre-existing choice.
 
 The selection screen shows profiles in their own section. Space merges or removes a profile,
 and the middle column carries the same member skills with navigation back and forth. `n`
-opens the profile editor (empty to create, or the profile under the cursor to edit). `d`
+opens the profile editor on the skills step (empty to create, or the profile under the cursor
+to edit) with name, description and skills fields; tab and enter move between them, enter on
+skills saves, and the CLI's name and member rules apply. Changing the name renames the
+profile, including this machine's record of it. `d`
 asks, and a second `d` deletes the profile under the cursor: it turns the profile off and
 joins the pending review, so save removes it from `profiles.json` and discarding keeps it. A
 profile edit writes `profiles.json` at once; selection changes join the same pending review
