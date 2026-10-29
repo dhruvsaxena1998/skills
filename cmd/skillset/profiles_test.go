@@ -418,7 +418,7 @@ func TestProfileEditOutput(t *testing.T) {
 	if out := skillset(t, "profile", "add", "fresh", "nice"); out != "fresh: app, nice\n" {
 		t.Fatalf("add existing = %q", out)
 	}
-	if out := skillset(t, "profile", "rm", "fresh"); out != "removed fresh\n" {
+	if out := skillset(t, "profile", "rm", "fresh"); out != "deleted profile fresh (its skills stay in the repo)\n" {
 		t.Fatalf("rm = %q", out)
 	}
 }
@@ -463,7 +463,7 @@ func TestProfileRmTurnsTheProfileOff(t *testing.T) {
 			t.Fatalf("enabled = %v, want %s kept", cfg.Enabled, keep)
 		}
 	}
-	if !strings.Contains(out, "removed overlap") {
+	if !strings.Contains(out, "deleted profile overlap") {
 		t.Fatalf("out = %q", out)
 	}
 
@@ -472,7 +472,7 @@ func TestProfileRmTurnsTheProfileOff(t *testing.T) {
 	if slices.Contains(cfg.Enabled, "app") || !slices.Contains(cfg.Enabled, "nice") {
 		t.Fatalf("enabled = %v, want app off and the direct nice kept", cfg.Enabled)
 	}
-	if !strings.Contains(out, "skills disabled: app") || !strings.Contains(out, "skillset apply") {
+	if !strings.Contains(out, "skills turned off: app") || !strings.Contains(out, "skillset apply") {
 		t.Fatalf("out = %q, want the disabled skills and the apply reminder", out)
 	}
 	if p, _ := loadProfiles(repo); len(p) != 2 {
@@ -515,7 +515,7 @@ func TestEditingAnEnabledProfileResyncs(t *testing.T) {
 	if !slices.Contains(cfg.Enabled, "app") {
 		t.Fatalf("enabled = %v, want the new member on", cfg.Enabled)
 	}
-	if !strings.Contains(out, "skills enabled: app") || !strings.Contains(out, "skillset apply") {
+	if !strings.Contains(out, "skills turned on: app") || !strings.Contains(out, "skillset apply") {
 		t.Fatalf("out = %q", out)
 	}
 
@@ -726,7 +726,7 @@ func TestProfileRmMembers(t *testing.T) {
 	if !slices.Equal(got["work"].Skills, []string{"app"}) || slices.Contains(currentConfig(t).Enabled, "nice") {
 		t.Fatalf("work = %v, enabled = %v", got["work"].Skills, currentConfig(t).Enabled)
 	}
-	if !strings.Contains(out, "skills disabled: nice") {
+	if !strings.Contains(out, "skills turned off: nice") {
 		t.Fatalf("out = %q", out)
 	}
 	skillset(t, "profile", "rm", "broken-set", "ghost") // a member gone from the repo

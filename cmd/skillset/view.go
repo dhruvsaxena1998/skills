@@ -516,9 +516,9 @@ func (m *model) detail(width int) []string {
 			body += "\n" + ui.label.Render("missing    ") + strings.Join(missing, ", ")
 		}
 		if r.note == "missing" {
-			body += "\n\n" + ui.dim.Render("definition removed; space clears it from this machine")
+			body += "\n\n" + ui.dim.Render("no longer in profiles.json; space turns it off here")
 		} else {
-			body += "\n\n" + ui.dim.Render("space merges the profile; turning it off keeps direct, shared and required skills")
+			body += "\n\n" + ui.dim.Render("space turns its skills on, adding to what's already on. Turning it off turns them off again, except skills you turned on yourself, another profile has, or a skill needs. Skills are never removed from the repo.")
 		}
 	case rowSkill:
 		body = m.skillDetail(r)

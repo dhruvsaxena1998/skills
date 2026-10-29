@@ -1232,10 +1232,10 @@ func (m *model) saveEdit() {
 	m.profiles, *m.cfg, m.editedDisk = profiles, cfg, true
 	m.cascade = "saved profile " + name
 	if len(added) > 0 {
-		m.cascade += "  ·  on: " + strings.Join(added, ", ")
+		m.cascade += "  ·  turned on: " + strings.Join(added, ", ")
 	}
 	if len(removed) > 0 {
-		m.cascade += "  ·  off: " + strings.Join(removed, ", ")
+		m.cascade += "  ·  turned off: " + strings.Join(removed, ", ")
 	}
 	m.dirty = m.pending() != ""
 	m.pop, m.popBody = "", nil
@@ -1277,21 +1277,34 @@ func (m *model) toggleProfile(name string) bool {
 	p, exists := m.profiles[name]
 	if slices.Contains(m.cfg.Profiles, name) {
 		removed, _ := disableProfile(m.cfg, name, p, m.profiles, m.deps)
-		m.cascade = name + " off"
-		if len(removed) == 0 {
-			m.cascade += " — direct, shared and required skills stay on"
+		m.cascade = "profile " + name + " off"
+		if len(removed) > 0 {
+			m.cascade += "  ·  turned off: " + strings.Join(removed, ", ")
+		}
+		var kept []string
+		for _, member := range sortedUnique(p.Skills) {
+			if slices.Contains(m.cfg.Enabled, member) {
+				kept = append(kept, member)
+			}
+		}
+		if len(kept) > 0 {
+			m.cascade += "  ·  still on (you turned them on, another profile has them, or a skill needs them): " + strings.Join(kept, ", ")
 		}
 		return true
 	}
 	if !exists {
-		m.cascade = "can't enable " + name + ": its profile definition is missing"
+		m.cascade = "can't turn on " + name + ": it's no longer in profiles.json"
 		return false
 	}
-	if _, _, err := enableProfile(m.cfg, name, p, m.deps, filepath.Join(m.cfg.Repo, "skills")); err != nil {
-		m.cascade = "can't enable " + name + ": " + err.Error()
+	added, _, err := enableProfile(m.cfg, name, p, m.deps, filepath.Join(m.cfg.Repo, "skills"))
+	if err != nil {
+		m.cascade = "can't turn on " + name + ": " + err.Error()
 		return false
 	}
-	m.cascade = name + " on"
+	m.cascade = "profile " + name + " on"
+	if len(added) > 0 {
+		m.cascade += "  ·  turned on: " + strings.Join(added, ", ")
+	}
 	return true
 }
 

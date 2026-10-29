@@ -281,10 +281,10 @@ func commitProfile(out io.Writer, cfg *Config, profiles map[string]profile, name
 		fmt.Fprintf(out, "%s: %s\n", name, strings.Join(sortedUnique(p.Skills), ", "))
 	}
 	if len(added) > 0 {
-		fmt.Fprintf(out, "skills enabled: %s\n", strings.Join(sortedUnique(added), ", "))
+		fmt.Fprintf(out, "skills turned on: %s\n", strings.Join(sortedUnique(added), ", "))
 	}
 	if len(removed) > 0 {
-		fmt.Fprintf(out, "skills disabled: %s\n", strings.Join(sortedUnique(removed), ", "))
+		fmt.Fprintf(out, "skills turned off: %s\n", strings.Join(sortedUnique(removed), ", "))
 	}
 	if len(added)+len(removed) > 0 {
 		fmt.Fprintln(out, "run `skillset apply` to link")
@@ -338,9 +338,9 @@ func profileRemove(out io.Writer, cfg *Config, profiles map[string]profile, args
 	if err := saveProfiles(cfg.Repo, profiles); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "removed %s\n", name)
+	fmt.Fprintf(out, "deleted profile %s (its skills stay in the repo)\n", name)
 	if len(removed) > 0 {
-		fmt.Fprintf(out, "skills disabled: %s\n", strings.Join(removed, ", "))
+		fmt.Fprintf(out, "skills turned off: %s\n", strings.Join(removed, ", "))
 		fmt.Fprintln(out, "run `skillset apply` to link")
 	}
 	return nil

@@ -162,7 +162,8 @@ func reportProfile(out io.Writer, cfg *Config, deps map[string]dep, verb, name s
 	}
 	if len(changed) > 0 {
 		slices.Sort(changed)
-		fmt.Fprintf(out, "skills %s: %s\n", verb, strings.Join(changed, ", "))
+		turned := map[string]string{"enabled": "on", "disabled": "off"}[verb]
+		fmt.Fprintf(out, "skills turned %s: %s\n", turned, strings.Join(changed, ", "))
 	}
 	for _, w := range warnings(cfg, deps) {
 		fmt.Fprintln(out, w)
