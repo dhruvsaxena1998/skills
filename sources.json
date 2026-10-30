@@ -19,7 +19,8 @@
       "to-questionnaire",
       "to-spec",
       "to-tickets",
-      "wait-what"
+      "wait-what",
+      "wayfinder"
     ],
     "deps": {
       "codebase-design": {},
@@ -84,7 +85,18 @@
           "unslop"
         ]
       },
-      "wait-what": {}
+      "wait-what": {},
+      "wayfinder": {
+        "requires": [
+          "domain-modeling",
+          "grilling",
+          "research"
+        ],
+        "optional": [
+          "prototype",
+          "setup-matt-pocock-skills"
+        ]
+      }
     }
   },
   "pstack": {
