@@ -11,6 +11,7 @@
       "grilling",
       "handoff",
       "implement-spec",
+      "improve-codebase-architecture",
       "pr",
       "prototype",
       "research",
@@ -46,6 +47,13 @@
         "optional": [
           "setup-matt-pocock-skills",
           "tdd"
+        ]
+      },
+      "improve-codebase-architecture": {
+        "requires": [
+          "codebase-design",
+          "domain-modeling",
+          "grilling"
         ]
       },
       "pr": {
