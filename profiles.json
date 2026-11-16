@@ -12,8 +12,6 @@
     "description": "Everyday engineering: planning, specs, debugging, reviews and writing",
     "skills": [
       "blast-radius",
-      "caveman",
-      "caveman-commit",
       "codebase-design",
       "diagnosing-bugs",
       "domain-modeling",
@@ -22,6 +20,7 @@
       "handoff",
       "how",
       "implement-spec",
+      "improve-codebase-architecture",
       "ponytail",
       "pr",
       "prototype",

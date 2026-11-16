@@ -11,6 +11,7 @@
       "grilling",
       "handoff",
       "implement-spec",
+      "improve-codebase-architecture",
       "pr",
       "prototype",
       "research",
@@ -19,7 +20,8 @@
       "to-questionnaire",
       "to-spec",
       "to-tickets",
-      "wait-what"
+      "wait-what",
+      "wayfinder"
     ],
     "deps": {
       "codebase-design": {},
@@ -45,6 +47,13 @@
         "optional": [
           "setup-matt-pocock-skills",
           "tdd"
+        ]
+      },
+      "improve-codebase-architecture": {
+        "requires": [
+          "codebase-design",
+          "domain-modeling",
+          "grilling"
         ]
       },
       "pr": {
@@ -84,7 +93,18 @@
           "unslop"
         ]
       },
-      "wait-what": {}
+      "wait-what": {},
+      "wayfinder": {
+        "requires": [
+          "domain-modeling",
+          "grilling",
+          "research"
+        ],
+        "optional": [
+          "prototype",
+          "setup-matt-pocock-skills"
+        ]
+      }
     }
   },
   "pstack": {
