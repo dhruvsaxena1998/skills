@@ -349,14 +349,14 @@ entry only while that skill is enabled, and removes it when it isn't.
 
 Claude Code loads subagents only from `~/.claude/agents`, so a subagent file inside a
 skill folder is read by that skill, never registered. A skill that needs real subagents,
-the way `cavecrew` sends work to `cavecrew-builder`, lists them in its `deps` entry:
+the way `impeccable` hands work to `impeccable-finish-reviewer`, lists them in its `deps` entry:
 
 ```json
-"cavecrew": { "agents": ["cavecrew-builder", "cavecrew-investigator", "cavecrew-reviewer"] }
+"impeccable": { "agents": ["impeccable-asset-producer", "impeccable-documenter", "impeccable-finish-reviewer", "impeccable-manual-edit-applier"] }
 ```
 
 Each name is `agents/<name>.md` in the repo, vendored through the source's `files`
-globs (`"agents/cavecrew-*.md"`) or committed by hand for a skill of your own.
+globs (`"agents/<prefix>-*.md"`) or committed by hand, the way impeccable's four are.
 `skillset apply` links each one into `~/.claude/agents` while the skill is enabled and
 removes the link when it isn't. The `agents` target has no subagent folder and gets none.
 A name with no file prints `skip agent <name>.md: not in the repo` and links the rest.

@@ -19,6 +19,10 @@ its [GitHub release](https://github.com/dhruvsaxena1998/skills/releases).
   description, and a skills checklist) and deletes them with `d`, confirmed and applied on save.
 - A repo without `profiles.json` works as before; the first profile write creates it.
 
+### Removed
+
+- The `caveman` source: its 16 skills, hooks, `src/hooks/` scripts and `cavecrew` subagents.
+
 ## v0.1.6 — 2026-10-28
 
 ### Added

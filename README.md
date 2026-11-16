@@ -11,7 +11,6 @@ sources.json             which skills to take from which upstream, and how they 
 profiles.json            optional named groups of skills to enable together
 hooks/                   vendored hook scripts, plus hooks.json (mine) registering them
 agents/                  vendored subagents, linked while the skill that ships them is enabled
-src/hooks/               caveman's hook scripts, vendored where its scripts expect them
 licenses/                upstream licenses
 cmd/skillset/            the skillset binary
 AGENTS.md                how to add a source, a skill, a patch or a hook
@@ -248,7 +247,6 @@ A skill whose `deps` entry lists `agents` gets each `agents/<name>.md` linked in
 | `pstack`     | [cursor/plugins › pstack](https://github.com/cursor/plugins/tree/main/pstack) | `vendor/pstack`     |
 | `ponytail`   | [dietrichgebert/ponytail](https://github.com/dietrichgebert/ponytail)         | `vendor/ponytail`   |
 | `taste`      | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill)                 | `vendor/taste`      |
-| `caveman`    | [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)               | `vendor/caveman`    |
 
 ## How upstream sync works
 
