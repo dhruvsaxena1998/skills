@@ -244,9 +244,8 @@ A skill whose `deps` entry lists `agents` gets each `agents/<name>.md` linked in
 | Source       | Upstream                                                                      | Branch              |
 | ------------ | ----------------------------------------------------------------------------- | ------------------- |
 | `mattpocock` | [mattpocock/skills](https://github.com/mattpocock/skills)                     | `vendor/mattpocock` |
-| `pstack`     | [cursor/plugins › pstack](https://github.com/cursor/plugins/tree/main/pstack) | `vendor/pstack`     |
 | `ponytail`   | [dietrichgebert/ponytail](https://github.com/dietrichgebert/ponytail)         | `vendor/ponytail`   |
-| `taste`      | [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill)                 | `vendor/taste`      |
+| `impeccable` | [pbakaus/impeccable](https://github.com/pbakaus/impeccable)                   | `vendor/impeccable` |
 
 ## How upstream sync works
 
@@ -282,23 +281,9 @@ Adding a source, a skill, a patch or a hook is in [AGENTS.md](AGENTS.md).
 
 ## Patches
 
-My edits to upstream skills, each in its own `patch` commit. List them with
+None right now: every vendored skill is exactly as upstream ships it. Each new edit goes in
+its own `patch` commit with a row here. The earlier patches are still in history:
 `git log --oneline --grep '^patch'`.
-
-| Skill                                                                                                      | Change                                                                              | Why                                                                |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `unslop`                                                                                                   | Dropped `disable-model-invocation`; the description says when to apply it           | Agents run it on their own when writing prose                      |
-| `pr`                                                                                                       | Prose goes through `unslop`; **Blast Radius** is filled by following `blast-radius` | Combine Matt's PR template with pstack's writing and risk checks   |
-| `blast-radius` | Links `arena`/`how`/`why` by path, with a subagent fallback when `arena` is off; pulls PRs with `gh` or MRs with `glab` | Those skills are reached by path here; support GitHub and GitLab |
-| `to-spec`, `to-tickets`, `to-questionnaire`, `research`, `domain-modeling`, `handoff`, `technical-writing` | Write their output through `unslop`                                                 | Consistent, plain prose in every artifact                          |
-| `typescript-best-practices`                                                                                | Dropped `disable-model-invocation`; principles linked by path                       | Applies automatically when editing `.ts`                           |
-| `tdd`                                                                                                      | Added "When not to add a test" from pstack's `tdd`                                  | Prefer no test over a bad test                                     |
-| `to-spec`, `to-tickets`, `implement-spec` | Without `/setup-matt-pocock-skills`, default to untracked local markdown in `.scratch/` (excluded via `.git/info/exclude`); GitHub, GitLab or tracked markdown only when asked | They work in any repo without a setup step or touching tracked files |
-| `arena`, `how`, `why` | Subagents run as `claude:opus/sonnet/haiku` or `codex:sol/terra/luna` seats instead of Cursor models; MCPs found from the session's tools | Run in Claude Code, mixing Claude and Codex models |
-
-Skills reference each other by relative path (`../unslop/SKILL.md`), not by name, because
-most pstack skills set `disable-model-invocation` and can't be called through the Skill
-tool.
 
 ## Windows
 

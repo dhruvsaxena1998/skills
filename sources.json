@@ -4,33 +4,41 @@
     "ref": "main",
     "path": "skills",
     "skills": [
+      "ask-matt",
+      "code-review",
       "codebase-design",
       "diagnosing-bugs",
       "domain-modeling",
+      "grill-me",
       "grill-with-docs",
       "grilling",
       "handoff",
+      "implement",
       "implement-spec",
       "improve-codebase-architecture",
       "pr",
       "prototype",
       "research",
+      "retro",
       "setup-matt-pocock-skills",
       "tdd",
+      "teach",
       "to-questionnaire",
       "to-spec",
       "to-tickets",
+      "triage",
       "wait-what",
-      "wayfinder"
+      "wayfinder",
+      "wizard",
+      "writing-for-agents"
     ],
     "deps": {
+      "ask-matt": {},
+      "code-review": {},
       "codebase-design": {},
       "diagnosing-bugs": {},
-      "domain-modeling": {
-        "optional": [
-          "unslop"
-        ]
-      },
+      "domain-modeling": {},
+      "grill-me": {},
       "grill-with-docs": {
         "requires": [
           "domain-modeling",
@@ -38,11 +46,8 @@
         ]
       },
       "grilling": {},
-      "handoff": {
-        "optional": [
-          "unslop"
-        ]
-      },
+      "handoff": {},
+      "implement": {},
       "implement-spec": {
         "optional": [
           "setup-matt-pocock-skills",
@@ -56,43 +61,31 @@
           "grilling"
         ]
       },
-      "pr": {
-        "optional": [
-          "blast-radius",
-          "unslop"
-        ]
-      },
+      "pr": {},
       "prototype": {},
-      "research": {
-        "optional": [
-          "unslop"
-        ]
-      },
+      "research": {},
+      "retro": {},
       "setup-matt-pocock-skills": {},
       "tdd": {
         "optional": [
           "codebase-design"
         ]
       },
-      "to-questionnaire": {
-        "optional": [
-          "unslop"
-        ]
-      },
+      "teach": {},
+      "to-questionnaire": {},
       "to-spec": {
         "optional": [
           "prototype",
-          "setup-matt-pocock-skills",
-          "unslop"
+          "setup-matt-pocock-skills"
         ]
       },
       "to-tickets": {
         "optional": [
           "prototype",
-          "setup-matt-pocock-skills",
-          "unslop"
+          "setup-matt-pocock-skills"
         ]
       },
+      "triage": {},
       "wait-what": {},
       "wayfinder": {
         "requires": [
@@ -104,56 +97,9 @@
           "prototype",
           "setup-matt-pocock-skills"
         ]
-      }
-    }
-  },
-  "pstack": {
-    "repo": "https://github.com/cursor/plugins",
-    "ref": "main",
-    "path": "pstack/skills",
-    "skills": [
-      "arena",
-      "blast-radius",
-      "correct",
-      "how",
-      "principle-boundary-discipline",
-      "principle-type-system-discipline",
-      "technical-writing",
-      "typescript-best-practices",
-      "unslop",
-      "why"
-    ],
-    "deps": {
-      "arena": {},
-      "blast-radius": {
-        "optional": [
-          "arena",
-          "how",
-          "unslop",
-          "why"
-        ]
       },
-      "correct": {},
-      "how": {},
-      "principle-boundary-discipline": {},
-      "principle-type-system-discipline": {
-        "requires": [
-          "principle-boundary-discipline"
-        ]
-      },
-      "technical-writing": {
-        "optional": [
-          "unslop"
-        ]
-      },
-      "typescript-best-practices": {
-        "requires": [
-          "principle-boundary-discipline",
-          "principle-type-system-discipline"
-        ]
-      },
-      "unslop": {},
-      "why": {}
+      "wizard": {},
+      "writing-for-agents": {}
     }
   },
   "ponytail": {
@@ -163,9 +109,6 @@
     "skills": [
       "ponytail",
       "ponytail-audit",
-      "ponytail-debt",
-      "ponytail-gain",
-      "ponytail-help",
       "ponytail-review"
     ],
     "files": [
@@ -180,37 +123,11 @@
           "ponytail"
         ]
       },
-      "ponytail-debt": {
-        "requires": [
-          "ponytail"
-        ]
-      },
-      "ponytail-gain": {
-        "requires": [
-          "ponytail"
-        ]
-      },
-      "ponytail-help": {
-        "requires": [
-          "ponytail"
-        ]
-      },
       "ponytail-review": {
         "optional": [
           "ponytail"
         ]
       }
-    }
-  },
-  "taste": {
-    "repo": "https://github.com/Leonxlnx/taste-skill",
-    "ref": "main",
-    "path": "skills",
-    "skills": [
-      "taste-skill"
-    ],
-    "deps": {
-      "taste-skill": {}
     }
   },
   "impeccable": {

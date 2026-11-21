@@ -4,22 +4,18 @@
     "skills": [
       "impeccable",
       "prototype",
-      "taste-skill",
-      "typescript-best-practices",
       "unslop-ui"
     ]
   },
   "global": {
     "description": "Everyday engineering: planning, specs, debugging, reviews and writing",
     "skills": [
-      "blast-radius",
       "codebase-design",
       "diagnosing-bugs",
       "domain-modeling",
       "grill-with-docs",
       "grilling",
       "handoff",
-      "how",
       "implement-spec",
       "improve-codebase-architecture",
       "ponytail",
@@ -27,11 +23,8 @@
       "prototype",
       "research",
       "tdd",
-      "technical-writing",
       "to-spec",
-      "to-tickets",
-      "unslop",
-      "why"
+      "to-tickets"
     ]
   }
 }
