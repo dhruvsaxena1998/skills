@@ -34,7 +34,11 @@
     ],
     "deps": {
       "ask-matt": {},
-      "code-review": {},
+      "code-review": {
+        "optional": [
+          "setup-matt-pocock-skills"
+        ]
+      },
       "codebase-design": {},
       "diagnosing-bugs": {},
       "domain-modeling": {},
@@ -85,7 +89,11 @@
           "setup-matt-pocock-skills"
         ]
       },
-      "triage": {},
+      "triage": {
+        "optional": [
+          "setup-matt-pocock-skills"
+        ]
+      },
       "wait-what": {},
       "wayfinder": {
         "requires": [
